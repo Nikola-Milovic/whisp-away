@@ -145,7 +145,9 @@ services.whisp-away = {
 
 **No text appears after recording?**
 - Check the notification for errors
-- For typing mode: Verify `wtype` is installed (Wayland)
+- For typing mode: 
+  - Wayland: Verify `wtype` is installed
+  - X11: Verify `xdotool` is installed (automatic fallback)
 - For clipboard mode: Verify `wl-copy` (Wayland) or `xclip` (X11) is installed
 - Try toggling output mode in the tray menu or use `--clipboard true/false`
 
