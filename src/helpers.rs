@@ -36,6 +36,8 @@ pub fn wav_to_samples(wav_data: &[u8]) -> Result<Vec<f32>> {
 pub struct TrayState {
     pub model: String,
     pub backend: String,
+    #[serde(default)]
+    pub use_clipboard: bool,
 }
 
 /// Get the runtime directory (XDG_RUNTIME_DIR or /tmp fallback)
@@ -98,5 +100,28 @@ pub fn resolve_model(arg: Option<String>) -> String {
 /// Get the acceleration type from environment variable
 pub fn get_acceleration_type() -> String {
     std::env::var("WA_ACCELERATION_TYPE").unwrap_or_else(|_| "unknown".to_string())
+}
+
+/// Resolves whether to use clipboard with priority:
+/// 1. Command-line argument
+/// 2. Tray state file
+/// 3. WA_USE_CLIPBOARD env var
+/// 4. Default to false
+pub fn resolve_use_clipboard(arg: Option<bool>) -> bool {
+    // Priority 1: Command-line argument
+    if let Some(use_clipboard) = arg {
+        return use_clipboard;
+    }
+    
+    // Priority 2: Tray state
+    if let Some(state) = read_tray_state() {
+        return state.use_clipboard;
+    }
+    
+    // Priority 3: Environment variable
+    // Priority 4: Default
+    std::env::var("WA_USE_CLIPBOARD")
+        .unwrap_or_else(|_| "false".to_string())
+        .to_lowercase() == "true"
 }
 

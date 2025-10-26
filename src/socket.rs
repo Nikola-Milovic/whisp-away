@@ -10,6 +10,7 @@ pub fn send_transcription_request(
     audio_file: &str,
     wtype_path: &str,
     backend_name: &str,
+    use_clipboard: bool,
 ) -> Result<()> {
     match UnixStream::connect(socket_path) {
         Ok(mut stream) => {
@@ -31,7 +32,7 @@ pub fn send_transcription_request(
                 let text = extract_text_from_response(&response);
                 
                 if let Some(transcribed_text) = text {
-                    typing::type_text(transcribed_text.trim(), wtype_path, &format!("{} daemon", backend_name))?;
+                    typing::output_text(transcribed_text.trim(), wtype_path, use_clipboard, &format!("{} daemon", backend_name))?;
                 } else {
                     Command::new("notify-send")
                         .args(&[

@@ -68,6 +68,10 @@ enum Commands {
         /// Path to whisper.cpp binary (for whisper-cpp backend)
         #[arg(long)]
         whisper_path: Option<String>,
+        
+        /// Output to clipboard instead of typing at cursor (overrides tray/env setting)
+        #[arg(long)]
+        clipboard: Option<bool>,
     },
     
     /// Run as a daemon server with model preloaded
@@ -125,20 +129,21 @@ fn main() -> Result<()> {
             }
         }
         
-        Commands::Stop { backend, bindings, model, wtype_path, audio_file, socket_path, whisper_path } => {
+        Commands::Stop { backend, bindings, model, wtype_path, audio_file, socket_path, whisper_path, clipboard } => {
             // Resolve backend (handles TrayDefined case)
             let resolved_backend = resolve_backend(&backend);
             
             let socket_path = socket_path.unwrap_or_else(|| "/tmp/whisp-away-daemon.sock".to_string());
+            let use_clipboard = helpers::resolve_use_clipboard(clipboard);
             
             match resolved_backend.as_str() {
                 "whisper-cpp" => {
                     // Pass bindings flag to daemon client (will be used in fallback)
-                    whisper_cpp::stop_and_transcribe_daemon(&wtype_path, &socket_path, audio_file.as_deref(), model, bindings, whisper_path)
+                    whisper_cpp::stop_and_transcribe_daemon(&wtype_path, &socket_path, audio_file.as_deref(), model, bindings, whisper_path, use_clipboard)
                 }
                 "faster-whisper" => {
                     // faster-whisper doesn't use bindings flag
-                    faster_whisper::stop_and_transcribe_daemon(&wtype_path, &socket_path)
+                    faster_whisper::stop_and_transcribe_daemon(&wtype_path, &socket_path, use_clipboard)
                 }
                 _ => Err(anyhow::anyhow!("Unknown backend: {}", resolved_backend))
             }

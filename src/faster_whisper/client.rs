@@ -5,7 +5,7 @@ use crate::recording;
 use crate::socket;
 use super::direct::transcribe_with_faster_whisper;
 
-pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str) -> Result<()> {
+pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str, use_clipboard: bool) -> Result<()> {
     let audio_file = match recording::stop_recording(None)? {
         Some(path) => path,
         None => {
@@ -63,7 +63,7 @@ pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str) -> Result
         ])
         .spawn()?;
 
-    match socket::send_transcription_request(socket_path, &audio_file, wtype_path, "faster-whisper") {
+    match socket::send_transcription_request(socket_path, &audio_file, wtype_path, "faster-whisper", use_clipboard) {
         Ok(_) => {
             let _ = fs::remove_file(&audio_file);
         }
@@ -77,7 +77,7 @@ pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str) -> Result
                 ])
                 .spawn()?;
             
-            let result = transcribe_with_faster_whisper(&audio_file, "base.en", wtype_path);
+            let result = transcribe_with_faster_whisper(&audio_file, "base.en", wtype_path, use_clipboard);
             
             let _ = fs::remove_file(&audio_file);
             

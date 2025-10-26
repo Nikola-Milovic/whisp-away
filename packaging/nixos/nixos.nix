@@ -65,6 +65,16 @@ in {
         Set to false to force rustPlatform usage even when crane is available.
       '';
     };
+    
+    useClipboard = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Output transcribed text to clipboard instead of typing at cursor.
+        When true, uses wl-copy (Wayland) or xclip (X11).
+        Can be toggled at runtime via the tray menu.
+      '';
+    };
   };
   
   config = mkIf cfg.enable {
@@ -76,6 +86,7 @@ in {
       WA_WHISPER_MODEL = cfg.defaultModel;
       WA_WHISPER_BACKEND = cfg.defaultBackend;
       WA_WHISPER_SOCKET = "/tmp/whisp-away-daemon.sock";
+      WA_USE_CLIPBOARD = if cfg.useClipboard then "true" else "false";
     } // optionalAttrs (cfg.accelerationType == "cuda") {
       CUDA_VISIBLE_DEVICES = "0";
       LD_LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn}/lib:\${LD_LIBRARY_PATH}";

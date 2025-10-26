@@ -14,15 +14,17 @@ struct DaemonStatus {
     running: bool,
     model: String,
     processing: bool,
+    use_clipboard: bool,
 }
 
 impl Default for DaemonStatus {
     fn default() -> Self {
-        // Use resolve_model to get the initial model (respects env vars)
+        // Use resolve functions to get the initial values (respects env vars)
         Self {
             running: false,
             model: crate::helpers::resolve_model(None),
             processing: false,
+            use_clipboard: crate::helpers::resolve_use_clipboard(None),
         }
     }
 }
@@ -60,11 +62,13 @@ impl VoiceInputTray {
     }
     
     fn save_state(&self) -> Result<()> {
-        let model = self.status.lock().unwrap().model.clone();
+        let status = self.status.lock().unwrap();
         let state = TrayState {
-            model,
+            model: status.model.clone(),
             backend: self.daemon_type.clone(),
+            use_clipboard: status.use_clipboard,
         };
+        drop(status);
         write_tray_state(&state)
     }
     
@@ -532,6 +536,42 @@ impl Tray for VoiceInputTray {
         items.push(MenuItem::Standard(StandardItem {
             label: format!("Acceleration: {}", acceleration.to_uppercase()),
             enabled: false,
+            ..Default::default()
+        }));
+        
+        // Clipboard output toggle
+        let current_clipboard = {
+            let status = self.status.lock().unwrap();
+            status.use_clipboard
+        };
+        items.push(MenuItem::Standard(StandardItem {
+            label: if current_clipboard {
+                "Output: ✓ Clipboard".to_string()
+            } else {
+                "Output: ✓ Type at Cursor".to_string()
+            },
+            activate: Box::new(|tray: &mut Self| {
+                if let Ok(mut status) = tray.status.lock() {
+                    status.use_clipboard = !status.use_clipboard;
+                    let new_mode = status.use_clipboard;
+                    drop(status);
+                    
+                    // Save state
+                    if let Err(e) = tray.save_state() {
+                        eprintln!("Warning: Failed to save clipboard state: {}", e);
+                    }
+                    
+                    // Show notification
+                    let mode_text = if new_mode { "Clipboard" } else { "Type at Cursor" };
+                    let _ = Command::new("notify-send")
+                        .args(&[
+                            "Voice Input",
+                            &format!("Output mode: {}", mode_text),
+                            "-t", "2000",
+                        ])
+                        .spawn();
+                }
+            }),
             ..Default::default()
         }));
 

@@ -3,7 +3,7 @@ use std::process::Command;
 use crate::typing;
 
 /// Transcribe audio with faster-whisper and type the result
-pub fn transcribe_with_faster_whisper(audio_file: &str, model: &str, wtype_path: &str) -> Result<()> {
+pub fn transcribe_with_faster_whisper(audio_file: &str, model: &str, wtype_path: &str, use_clipboard: bool) -> Result<()> {
     let acceleration = crate::helpers::get_acceleration_type();
     let transcribe_msg = format!("⏳ Transcribing... ({})", acceleration);
     
@@ -37,7 +37,7 @@ pub fn transcribe_with_faster_whisper(audio_file: &str, model: &str, wtype_path:
     if output.status.success() {
         let clean_text = transcribed_text.trim();
         
-        typing::type_text(&clean_text, wtype_path, "faster-whisper")?;
+        typing::output_text(&clean_text, wtype_path, use_clipboard, "faster-whisper")?;
     } else {
         Command::new("notify-send")
             .args(&[
