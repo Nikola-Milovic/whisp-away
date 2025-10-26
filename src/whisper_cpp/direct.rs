@@ -127,7 +127,7 @@ pub fn transcribe_audio(audio_file: &str, model: &str) -> Result<String> {
 
 
 /// Transcribe audio using whisper-cpp CLI binary
-pub fn transcribe_with_cli(audio_file: &str, model: &str, whisper_path: &str, wtype_path: &str, use_clipboard: bool) -> Result<()> {
+pub fn transcribe_with_cli(audio_file: &str, model: &str, whisper_path: &str, use_clipboard: bool) -> Result<()> {
     let acceleration = crate::helpers::get_acceleration_type();
     let transcribe_msg = format!("⏳ Transcribing with CLI... ({})", acceleration);
     
@@ -184,12 +184,12 @@ pub fn transcribe_with_cli(audio_file: &str, model: &str, whisper_path: &str, wt
         }
     }
 
-    typing::output_text(result.trim(), wtype_path, use_clipboard, "whisper-cpp CLI")?;
+    typing::output_text(result.trim(), use_clipboard, "whisper-cpp CLI")?;
     Ok(())
 }
 
 /// Transcribe audio from file and type the result using wtype
-pub fn transcribe_with_whisper_rs(audio_file: &str, model: &str, _whisper_path: &str, wtype_path: &str, use_clipboard: bool) -> Result<()> {
+pub fn transcribe_with_whisper_rs(audio_file: &str, model: &str, _whisper_path: &str, use_clipboard: bool) -> Result<()> {
     let acceleration = crate::helpers::get_acceleration_type();
     let transcribe_msg = format!("⏳ Transcribing with GPU... ({})", acceleration);
     
@@ -204,7 +204,7 @@ pub fn transcribe_with_whisper_rs(audio_file: &str, model: &str, _whisper_path: 
 
     match transcribe_audio(audio_file, model) {
         Ok(clean_text) => {
-        typing::output_text(&clean_text, wtype_path, use_clipboard, "whisper-cpp")?;
+        typing::output_text(&clean_text, use_clipboard, "whisper-cpp")?;
             Ok(())
         }
         Err(e) => {

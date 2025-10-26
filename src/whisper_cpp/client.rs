@@ -5,7 +5,7 @@ use crate::recording;
 use crate::socket;
 use super::direct::{transcribe_with_whisper_rs, transcribe_with_cli};
 
-pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str, audio_file_override: Option<&str>, model: Option<String>, bindings: bool, whisper_path: Option<String>, use_clipboard: bool) -> Result<()> {
+pub fn stop_and_transcribe_daemon(socket_path: &str, audio_file_override: Option<&str>, model: Option<String>, bindings: bool, whisper_path: Option<String>, use_clipboard: bool) -> Result<()> {
     let audio_file = match recording::stop_recording(audio_file_override)? {
         Some(path) => path,
         None => {
@@ -68,7 +68,7 @@ pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str, audio_fil
 
     eprintln!("DEBUG: Connecting to daemon socket at: {}", socket_path);
     
-    match socket::send_transcription_request(socket_path, &audio_file, wtype_path, "whisper-cpp", use_clipboard) {
+    match socket::send_transcription_request(socket_path, &audio_file, "whisper-cpp", use_clipboard) {
         Ok(_) => {
             eprintln!("DEBUG: Total time: {:?}", start_time.elapsed());
             let _ = fs::remove_file(&audio_file);
@@ -99,10 +99,10 @@ pub fn stop_and_transcribe_daemon(wtype_path: &str, socket_path: &str, audio_fil
                 let whisper_path = whisper_path.unwrap_or_else(|| 
                     std::env::var("WHISPER_CPP_PATH").unwrap_or_else(|_| "whisper-cpp".to_string())
                 );
-                transcribe_with_cli(&audio_file, &model, &whisper_path, wtype_path, use_clipboard)
+                transcribe_with_cli(&audio_file, &model, &whisper_path, use_clipboard)
             } else {
                 // Use whisper-rs bindings for fallback (default, same as daemon)
-                transcribe_with_whisper_rs(&audio_file, &model, "", wtype_path, use_clipboard)
+                transcribe_with_whisper_rs(&audio_file, &model, "", use_clipboard)
             };
             
             let _ = fs::remove_file(&audio_file);

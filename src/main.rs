@@ -53,10 +53,6 @@ enum Commands {
         #[arg(short, long)]
         model: Option<String>,
         
-        /// Path to wtype binary
-        #[arg(long, default_value = "wtype")]
-        wtype_path: String,
-        
         /// Optional audio file to transcribe (instead of recorded audio)
         #[arg(short, long)]
         audio_file: Option<String>,
@@ -129,7 +125,7 @@ fn main() -> Result<()> {
             }
         }
         
-        Commands::Stop { backend, bindings, model, wtype_path, audio_file, socket_path, whisper_path, clipboard } => {
+        Commands::Stop { backend, bindings, model, audio_file, socket_path, whisper_path, clipboard } => {
             // Resolve backend (handles TrayDefined case)
             let resolved_backend = resolve_backend(&backend);
             
@@ -139,11 +135,11 @@ fn main() -> Result<()> {
             match resolved_backend.as_str() {
                 "whisper-cpp" => {
                     // Pass bindings flag to daemon client (will be used in fallback)
-                    whisper_cpp::stop_and_transcribe_daemon(&wtype_path, &socket_path, audio_file.as_deref(), model, bindings, whisper_path, use_clipboard)
+                    whisper_cpp::stop_and_transcribe_daemon(&socket_path, audio_file.as_deref(), model, bindings, whisper_path, use_clipboard)
                 }
                 "faster-whisper" => {
                     // faster-whisper doesn't use bindings flag
-                    faster_whisper::stop_and_transcribe_daemon(&wtype_path, &socket_path, use_clipboard)
+                    faster_whisper::stop_and_transcribe_daemon(&socket_path, use_clipboard)
                 }
                 _ => Err(anyhow::anyhow!("Unknown backend: {}", resolved_backend))
             }

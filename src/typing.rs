@@ -3,7 +3,7 @@ use std::process::{Command, Stdio};
 use std::io::Write;
 
 /// Output transcribed text to clipboard or type at cursor
-pub fn output_text(text: &str, wtype_path: &str, use_clipboard: bool, backend_name: &str) -> Result<()> {
+pub fn output_text(text: &str, use_clipboard: bool, backend_name: &str) -> Result<()> {
     if text.trim().is_empty() {
         Command::new("notify-send")
             .args(&[
@@ -31,24 +31,52 @@ pub fn output_text(text: &str, wtype_path: &str, use_clipboard: bool, backend_na
         // Small delay before typing
         std::thread::sleep(std::time::Duration::from_millis(30));
         
-        // Type the text
-        Command::new(wtype_path)
-            .arg(text.trim())
-            .spawn()
-            .context("Failed to run wtype")?
-            .wait()?;
-        
-        // Show success notification
-        Command::new("notify-send")
-            .args(&[
-                "Voice Input",
-                &format!("✅ Transcribed\nBackend: {}", backend_name),
-                "-t", "1000",
-                "-h", "string:x-canonical-private-synchronous:voice"
-            ])
-            .spawn()?;
+        type_at_cursor(text.trim(), backend_name)?;
     }
 
+    Ok(())
+}
+
+/// Type text at cursor using wtype (Wayland) or xdotool (X11)
+fn type_at_cursor(text: &str, backend_name: &str) -> Result<()> {
+    // Try wtype first (Wayland)
+    let wtype_result = Command::new("wtype")
+        .arg(text)
+        .spawn()
+        .and_then(|mut child| child.wait());
+    
+    if let Ok(status) = wtype_result {
+        if status.success() {
+            // Show success notification
+            Command::new("notify-send")
+                .args(&[
+                    "Voice Input",
+                    &format!("✅ Transcribed\nBackend: {}", backend_name),
+                    "-t", "1000",
+                    "-h", "string:x-canonical-private-synchronous:voice"
+                ])
+                .spawn()?;
+            return Ok(());
+        }
+    }
+    
+    // Fallback to xdotool (X11)
+    Command::new("xdotool")
+        .args(&["type", "--clearmodifiers", "--", text])
+        .spawn()
+        .context("Failed to run typing command (tried wtype and xdotool)")?
+        .wait()?;
+    
+    // Show success notification
+    Command::new("notify-send")
+        .args(&[
+            "Voice Input",
+            &format!("✅ Transcribed\nBackend: {}", backend_name),
+            "-t", "1000",
+            "-h", "string:x-canonical-private-synchronous:voice"
+        ])
+        .spawn()?;
+    
     Ok(())
 }
 
@@ -91,6 +119,6 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
 }
 
 /// Legacy function for backwards compatibility - uses typing mode
-pub fn type_text(text: &str, wtype_path: &str, backend_name: &str) -> Result<()> {
-    output_text(text, wtype_path, false, backend_name)
+pub fn type_text(text: &str, backend_name: &str) -> Result<()> {
+    output_text(text, false, backend_name)
 }
