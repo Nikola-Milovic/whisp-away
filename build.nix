@@ -30,9 +30,16 @@ let
   model-download-scripts = callPackage ./scripts/model-download.nix {
     inherit curl;
   };
-  
-  # Hardcode the whisper-rs hash for now
-  whisper-rs-hash = "sha256-NGbi1qKRC+A70k+Y5DYJOP75dgpcbTw7FqdCgMPmCjk=";
+
+  # Parse Cargo.lock to extract git dependency info
+  cargoLock = builtins.fromTOML (builtins.readFile ./Cargo.lock);
+  whisperRsPkg = lib.findFirst (pkg: pkg.name or null == "whisper-rs") null cargoLock.package;
+  whisperRsSource = whisperRsPkg.source or (throw "whisper-rs not found in Cargo.lock");
+  whisperRsRev = builtins.head (builtins.match ".*#([a-f0-9]+)" whisperRsSource);
+
+  # Load hash from external file (update with: nix run .#update-git-deps)
+  gitDeps = import ./git-deps.nix;
+  whisper-rs-hash = gitDeps."whisper-rs";
 
   # The actual builder - same for both crane and rustPlatform
   buildPackage = if useCrane then craneLib.buildPackage else rustPlatform.buildRustPackage;
