@@ -4,11 +4,11 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
 
 ## Features
 
-- **Instant Typing**: Transcribed text is typed directly at your cursor
+- **Flexible Output**: Instant typing at cursor or copy to clipboard
 - **Dual Backends**: Choose between `whisper.cpp` or `faster-whisper`
 - **Hardware Acceleration**: CUDA, Vulkan, OpenVINO, and CPU support
 - **Model Preloading**: Daemon mode keeps models in memory for instant transcription
-- **System Tray Control**: Start/stop preload daemon using system tray
+- **System Tray Control**: Start/stop daemon and toggle output mode
 - **NixOS Integration**: First-class NixOS and Home Manager support
 
 ## Installation
@@ -25,7 +25,8 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
   services.whisp-away = {
     enable = true;
     accelerationType = "vulkan";  # or "cuda", "openvino", "cpu" - requires rebuild
-    useCrane = "false" # Enable if you want faster rebuilds when developing
+    useClipboard = false;         # true = copy to clipboard, false = type at cursor
+    useCrane = false;             # Enable if you want faster rebuilds when developing
   };
 }
 ```
@@ -56,7 +57,7 @@ whisp-away tray -b faster-whisper  # Use faster-whisper backend
 
 The tray icon lets you:
 - **Left-click**: Start/stop daemon for preloaded models
-- **Right-click**: Open menu with status and options
+- **Right-click**: Open menu to toggle output mode (clipboard/typing), check status, and switch backends
 
 ### Command Line
 
@@ -65,9 +66,10 @@ The tray icon lets you:
 whisp-away start              # Start recording
 whisp-away stop               # Stop and transcribe
 
-# Specify model or backend
+# Specify model, backend, or output mode
 whisp-away stop --model medium.en
 whisp-away stop --backend faster-whisper
+whisp-away stop --clipboard true     # Copy to clipboard instead of typing
 ```
 
 ## Models & Performance
@@ -119,7 +121,8 @@ services.whisp-away = {
   enable = true;
   defaultModel = "small.en";        # sets WA_WHISPER_MODEL
   defaultBackend = "whisper-cpp";   # sets WA_WHISPER_BACKEND
-  accelerationType = "vulkan";      # 
+  accelerationType = "vulkan";      # GPU acceleration type
+  useClipboard = false;             # sets WA_USE_CLIPBOARD (false = type, true = clipboard)
 }
 ```
 
@@ -127,6 +130,7 @@ services.whisp-away = {
 
 - `WA_WHISPER_MODEL`: Default model (e.g., "small.en")
 - `WA_WHISPER_BACKEND`: Default backend ("whisper-cpp" or "faster-whisper")
+- `WA_USE_CLIPBOARD`: Output mode ("true" = clipboard, "false" = typing at cursor)
 
 ## Troubleshooting
 
@@ -141,8 +145,9 @@ services.whisp-away = {
 
 **No text appears after recording?**
 - Check the notification for errors
-- Verify `wtype` is installed for Wayland or `xdotool` for X11
-- Test with `whisp-away stop --no-typing` to see raw output
+- For typing mode: Verify `wtype` is installed (Wayland)
+- For clipboard mode: Verify `wl-copy` (Wayland) or `xclip` (X11) is installed
+- Try toggling output mode in the tray menu or use `--clipboard true/false`
 
 ## Project Status
 
