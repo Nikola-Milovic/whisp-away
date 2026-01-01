@@ -86,22 +86,56 @@
           fi
 
           echo "Found whisper-rs rev: $REV"
-          echo "Fetching hash..."
+          echo "Fetching whisper-rs hash..."
 
           HASH=$(${pkgs.nix-prefetch-git}/bin/nix-prefetch-git \
             https://codeberg.org/madjinn/whisper-rs.git \
             --rev "$REV" --quiet 2>/dev/null | ${pkgs.jq}/bin/jq -r .hash)
 
-          echo "Hash: $HASH"
+          echo "whisper-rs hash: $HASH"
+
+          # Get the whisper.cpp submodule commit from the whisper-rs repo
+          echo "Fetching whisper.cpp submodule reference..."
+          TEMP_DIR=$(mktemp -d)
+          trap "rm -rf $TEMP_DIR" EXIT
+          
+          ${pkgs.git}/bin/git clone --depth 1 --no-checkout \
+            https://codeberg.org/madjinn/whisper-rs.git "$TEMP_DIR/whisper-rs" 2>/dev/null
+          cd "$TEMP_DIR/whisper-rs"
+          ${pkgs.git}/bin/git fetch origin "$REV" --depth 1 2>/dev/null
+          ${pkgs.git}/bin/git checkout "$REV" 2>/dev/null
+          
+          # Get submodule commit from .gitmodules and git ls-tree
+          WHISPER_CPP_REV=$(${pkgs.git}/bin/git ls-tree HEAD sys/whisper.cpp 2>/dev/null | ${pkgs.gawk}/bin/awk '{print $3}')
+          
+          if [ -z "$WHISPER_CPP_REV" ]; then
+            echo "Warning: Could not find whisper.cpp submodule reference, using fallback"
+            WHISPER_CPP_REV="fc45bb86251f774ef817e89878bb4c2636c8a58f"
+          fi
+          
+          echo "Found whisper.cpp submodule rev: $WHISPER_CPP_REV"
+          echo "Fetching whisper.cpp hash..."
+          
+          cd /
+          WHISPER_CPP_HASH=$(${pkgs.nix-prefetch-git}/bin/nix-prefetch-git \
+            https://github.com/ggerganov/whisper.cpp.git \
+            --rev "$WHISPER_CPP_REV" --fetch-submodules --quiet 2>/dev/null | ${pkgs.jq}/bin/jq -r .hash)
+          
+          echo "whisper.cpp hash: $WHISPER_CPP_HASH"
 
           # Update git-deps.nix
           cat > git-deps.nix <<EOF
-          # Git dependency hashes
-          # Update with: nix run .#update-git-deps
-          {
-            "whisper-rs" = "$HASH";
-          }
-          EOF
+# Git dependency hashes
+# Update with: nix run .#update-git-deps
+{
+  "whisper-rs" = "$HASH";
+  
+  # whisper.cpp submodule commit that whisper-rs uses
+  # This is needed because cargo vendoring doesn't handle git submodules
+  "whisper-cpp-submodule" = "$WHISPER_CPP_REV";
+  "whisper-cpp-submodule-hash" = "$WHISPER_CPP_HASH";
+}
+EOF
 
           echo "✓ Updated git-deps.nix"
         ''}";

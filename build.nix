@@ -1,4 +1,4 @@
-{ lib, rustPlatform ? null, pkg-config, dbus, whisper-cpp ? null, makeWrapper, python3, fetchFromGitHub, cudaPackages, cmake, libclang, git, stdenv, pulseaudio, wtype, wl-clipboard, libnotify, vulkan-headers, vulkan-loader, shaderc, openblas, patchelf, openvino, tbb, callPackage, curl, accelerationType ? "vulkan"
+{ lib, rustPlatform ? null, pkg-config, dbus, whisper-cpp ? null, makeWrapper, python3, fetchFromGitHub, fetchgit, cudaPackages, cmake, libclang, git, stdenv, pulseaudio, wtype, wl-clipboard, libnotify, vulkan-headers, vulkan-loader, shaderc, openblas, patchelf, openvino, tbb, callPackage, curl, accelerationType ? "vulkan"
 # Build system selection
 , useCrane ? false
 , craneLib ? null
@@ -40,6 +40,16 @@ let
   # Load hash from external file (update with: nix run .#update-git-deps)
   gitDeps = import ./git-deps.nix;
   whisper-rs-hash = gitDeps."whisper-rs";
+  
+  # Fetch the whisper.cpp submodule source separately
+  # This is needed because cargo vendoring doesn't properly handle git submodules
+  # The commit hash should match what the whisper-rs submodule points to
+  whisper-cpp-src = fetchgit {
+    url = "https://github.com/ggerganov/whisper.cpp";
+    rev = gitDeps."whisper-cpp-submodule" or "fc45bb86251f774ef817e89878bb4c2636c8a58f";
+    hash = gitDeps."whisper-cpp-submodule-hash" or "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+    fetchSubmodules = true;
+  };
 
   # The actual builder - same for both crane and rustPlatform
   buildPackage = if useCrane then craneLib.buildPackage else rustPlatform.buildRustPackage;
@@ -164,6 +174,42 @@ let
         # Force the vulkan feature to be enabled
         export CARGO_FEATURE_VULKAN=1
       ''}
+      
+      # Fix for git submodule not being included in cargo vendor
+      # Find the whisper-rs-sys source in the cargo vendor directory and populate whisper.cpp
+      echo "=== Populating whisper.cpp submodule source ==="
+      VENDOR_DIR=""
+      if [ -d "$cargoVendorDir" ]; then
+        VENDOR_DIR="$cargoVendorDir"
+      elif [ -d "cargo-vendor-dir" ]; then
+        VENDOR_DIR="cargo-vendor-dir"
+      elif [ -d "$NIX_BUILD_TOP/cargo-vendor-dir" ]; then
+        VENDOR_DIR="$NIX_BUILD_TOP/cargo-vendor-dir"
+      fi
+      
+      if [ -n "$VENDOR_DIR" ]; then
+        # Find whisper-rs-sys directory
+        WHISPER_SYS_DIR=$(find "$VENDOR_DIR" -maxdepth 1 -type d -name "whisper-rs-sys-*" | head -1)
+        if [ -n "$WHISPER_SYS_DIR" ]; then
+          echo "Found whisper-rs-sys at: $WHISPER_SYS_DIR"
+          # Remove empty whisper.cpp directory if it exists
+          if [ -d "$WHISPER_SYS_DIR/whisper.cpp" ]; then
+            rm -rf "$WHISPER_SYS_DIR/whisper.cpp"
+          fi
+          # Copy the whisper.cpp source
+          echo "Copying whisper.cpp source from ${whisper-cpp-src}..."
+          cp -r "${whisper-cpp-src}" "$WHISPER_SYS_DIR/whisper.cpp"
+          chmod -R u+w "$WHISPER_SYS_DIR/whisper.cpp"
+          echo "whisper.cpp source populated successfully"
+          ls -la "$WHISPER_SYS_DIR/whisper.cpp/" | head -10
+        else
+          echo "Warning: Could not find whisper-rs-sys directory in vendor dir"
+          ls -la "$VENDOR_DIR/" | head -20
+        fi
+      else
+        echo "Warning: Could not find cargo vendor directory"
+      fi
+      echo "========================="
       
       # Debug: Show what environment variables are set
       echo "=== Build Environment ==="
