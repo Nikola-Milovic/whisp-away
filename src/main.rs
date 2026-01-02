@@ -118,14 +118,15 @@ fn main() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(Level::WARN);
     
-    FmtSubscriber::builder()
+    // Use try_init to avoid panic if subscriber already set
+    let _ = FmtSubscriber::builder()
         .with_max_level(log_level)
         .with_target(false)
         .with_thread_ids(false)
         .with_file(false)
         .with_line_number(false)
         .compact()
-        .init();
+        .try_init();
     
     debug!("whisp-away starting");
     
