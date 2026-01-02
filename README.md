@@ -41,13 +41,29 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
 
 ### Keybinds (Recommended)
 
-Configure push-to-talk in your window manager. Example for Hyprland:
+Configure in your window manager. Two options:
 
+**Option 1: Single key toggle** (simplest)
 ```conf
-# section = the § key on Swedish keyboards (top-left, below Esc)
+# Hyprland - press once to start, press again to stop and transcribe
+bind = ,section,exec, whisp-away toggle
+
+# With clipboard output:
+bind = ,section,exec, whisp-away toggle --clipboard true
+```
+
+**Option 2: Push-to-talk** (hold to record)
+```conf
+# Hyprland - hold key to record, release to transcribe
 bind = ,section,exec, whisp-away start
 bindr = ,section,exec, whisp-away stop
+
+# Sway equivalent:
+bindsym section exec whisp-away start
+bindsym --release section exec whisp-away stop
 ```
+
+Note: `section` is the § key on Swedish keyboards (top-left, below Esc). Replace with your preferred key.
 
 ### System Tray
 
@@ -76,7 +92,11 @@ whisp-away stop    # Stop and transcribe (instant with daemon)
 ### Command Line
 
 ```bash
-# One-shot recording and transcription
+# Toggle mode - single command for start/stop
+whisp-away toggle             # Start if not recording, stop if recording
+whisp-away toggle --clipboard true  # Same but output to clipboard
+
+# Separate start/stop commands
 whisp-away start              # Start recording
 whisp-away stop               # Stop and transcribe
 

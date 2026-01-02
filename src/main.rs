@@ -27,24 +27,31 @@ enum Backend {
     /// Use faster-whisper backend
     #[value(name = "faster-whisper", alias = "faster")]
     FasterWhisper,
-    /// Use the backend defined in the tray state
-    #[value(name = "tray-defined", alias = "tray")]
-    TrayDefined,
+    /// Use the backend from WA_WHISPER_BACKEND env var (default: faster-whisper)
+    #[value(name = "auto", alias = "default")]
+    Auto,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     /// Start recording audio
-    Start {
+    Start,
+    
+    /// Toggle recording: start if not recording, stop and transcribe if recording
+    Toggle {
         /// Backend to use for transcription
-        #[arg(short, long, default_value = "tray")]
+        #[arg(short, long, default_value = "auto")]
         backend: Backend,
+        
+        /// Output to clipboard instead of typing at cursor
+        #[arg(long)]
+        clipboard: Option<bool>,
     },
     
     /// Stop recording and transcribe
     Stop {
         /// Backend to use for transcription
-        #[arg(short, long, default_value = "tray")]
+        #[arg(short, long, default_value = "auto")]
         backend: Backend,
         
         /// Use whisper-rs bindings for fallback (default: true, whisper-cpp only)
@@ -75,7 +82,7 @@ enum Commands {
     /// Run as a daemon server with model preloaded
     Daemon {
         /// Backend to use
-        #[arg(short, long, default_value = "tray")]
+        #[arg(short, long, default_value = "auto")]
         backend: Backend,
         
         /// Model to use (overrides WA_WHISPER_MODEL env var)
@@ -90,23 +97,19 @@ enum Commands {
     /// Run system tray icon for daemon control
     Tray {
         /// Backend to monitor
-        #[arg(short, long, default_value = "tray")]
+        #[arg(short, long, default_value = "auto")]
         backend: Backend,
     },
 }
 
-/// Resolves the backend to use, handling TrayDefined case
+/// Resolves the backend to use
 fn resolve_backend(backend: &Backend) -> String {
     match backend {
         Backend::WhisperCpp => "whisper-cpp".to_string(),
         Backend::FasterWhisper => "faster-whisper".to_string(),
-        Backend::TrayDefined => {
-            // Check tray state first, then env var, then default
-            if let Some(state) = helpers::read_tray_state() {
-                state.backend
-            } else {
-                std::env::var("WA_WHISPER_BACKEND").unwrap_or_else(|_| "faster-whisper".to_string())
-            }
+        Backend::Auto => {
+            // Use env var or default to faster-whisper
+            std::env::var("WA_WHISPER_BACKEND").unwrap_or_else(|_| "faster-whisper".to_string())
         }
     }
 }
@@ -134,35 +137,52 @@ fn main() -> Result<()> {
 
     match cli.command {
         // New unified commands
-        Commands::Start { backend } => {
-            // Resolve backend if TrayDefined
+        Commands::Start => {
+            debug!("Start command");
+            recording::start_recording()
+        }
+        
+        Commands::Toggle { backend, clipboard } => {
             let resolved_backend = resolve_backend(&backend);
-            debug!("Start command - resolved backend: {}", resolved_backend);
+            debug!("Toggle command - resolved backend: {}", resolved_backend);
             
-            match resolved_backend.as_str() {
-                "whisper-cpp" => recording::start_recording("whisper-cpp"),
-                "faster-whisper" => recording::start_recording("faster-whisper"),
-                unknown => Err(anyhow::anyhow!("Unknown backend: {}", unknown)),
+            // Check if recording is in progress
+            if recording::is_recording() {
+                // Stop and transcribe
+                debug!("Recording in progress, stopping and transcribing");
+                let socket_path = helpers::resolve_socket_path(None);
+                let use_clipboard = helpers::resolve_use_clipboard(clipboard);
+                
+                match resolved_backend.as_str() {
+                    "whisper-cpp" => {
+                        whisper_cpp::stop_and_transcribe_daemon(&socket_path, None, None, true, None, use_clipboard)
+                    }
+                    "faster-whisper" => {
+                        faster_whisper::stop_and_transcribe_daemon(&socket_path, use_clipboard)
+                    }
+                    _ => Err(anyhow::anyhow!("Unknown backend: {}", resolved_backend))
+                }
+            } else {
+                // Start recording
+                debug!("No recording in progress, starting");
+                recording::start_recording()
             }
         }
         
         Commands::Stop { backend, bindings, model, audio_file, socket_path, whisper_path, clipboard } => {
-            // Resolve backend (handles TrayDefined case)
             let resolved_backend = resolve_backend(&backend);
             debug!("Stop command - resolved backend: {}, bindings: {}, model: {:?}", 
                    resolved_backend, bindings, model);
             
-            let socket_path = socket_path.unwrap_or_else(|| "/tmp/whisp-away-daemon.sock".to_string());
+            let socket_path = helpers::resolve_socket_path(socket_path);
             let use_clipboard = helpers::resolve_use_clipboard(clipboard);
             debug!("Socket path: {}, use_clipboard: {}", socket_path, use_clipboard);
             
             match resolved_backend.as_str() {
                 "whisper-cpp" => {
-                    // Pass bindings flag to daemon client (will be used in fallback)
                     whisper_cpp::stop_and_transcribe_daemon(&socket_path, audio_file.as_deref(), model, bindings, whisper_path, use_clipboard)
                 }
                 "faster-whisper" => {
-                    // faster-whisper doesn't use bindings flag
                     faster_whisper::stop_and_transcribe_daemon(&socket_path, use_clipboard)
                 }
                 _ => Err(anyhow::anyhow!("Unknown backend: {}", resolved_backend))
@@ -172,15 +192,13 @@ fn main() -> Result<()> {
         Commands::Daemon { backend, model, socket_path } => {
             let resolved_backend = resolve_backend(&backend);
             let model = helpers::resolve_model(model);
-            debug!("Daemon command - resolved backend: {}, model: {}", resolved_backend, model);
+            let socket_path = helpers::resolve_socket_path(socket_path);
+            debug!("Daemon command - backend: {}, model: {}, socket: {}", 
+                   resolved_backend, model, socket_path);
             
             match resolved_backend.as_str() {
                 "whisper-cpp" => whisper_cpp::run_daemon(&model),
-                "faster-whisper" => {
-                    let socket_path = socket_path.unwrap_or_else(|| "/tmp/whisp-away-daemon.sock".to_string());
-                    debug!("Starting faster-whisper daemon on socket: {}", socket_path);
-                    faster_whisper::run_daemon(&model, &socket_path)
-                }
+                "faster-whisper" => faster_whisper::run_daemon(&model, &socket_path),
                 unknown => Err(anyhow::anyhow!("Unknown backend: {}", unknown)),
             }
         }

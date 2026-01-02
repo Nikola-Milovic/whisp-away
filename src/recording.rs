@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use std::fs::{self, File};
-use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::process::Command;
 use std::time::{Duration, SystemTime};
@@ -10,6 +9,38 @@ use crate::helpers::is_process_running;
 const LOCK_FILE: &str = "/tmp/whisp-away-recording.lock";
 const PID_FILE: &str = "/tmp/whisp-away-recording.pid";
 const MAX_RECORDING_AGE_SECS: u64 = 600; // 10 minutes
+
+/// Check if a recording is currently in progress
+pub fn is_recording() -> bool {
+    // Check if pidfile exists and process is running
+    if let Ok(pid_str) = fs::read_to_string(PID_FILE) {
+        if let Ok(pid) = pid_str.trim().parse::<u32>() {
+            if is_process_running(pid) {
+                debug!("Recording in progress (PID: {})", pid);
+                return true;
+            }
+        }
+    }
+    
+    // Also check if lock file exists and is locked
+    if std::path::Path::new(LOCK_FILE).exists() {
+        if let Ok(lock_file) = fs::OpenOptions::new().read(true).open(LOCK_FILE) {
+            use std::os::unix::io::AsRawFd;
+            let fd = lock_file.as_raw_fd();
+            // Try to acquire lock non-blocking - if it fails, someone else has it
+            let result = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+            if result != 0 {
+                debug!("Recording lock is held by another process");
+                return true;
+            }
+            // We got the lock, release it immediately
+            unsafe { libc::flock(fd, libc::LOCK_UN) };
+        }
+    }
+    
+    debug!("No recording in progress");
+    false
+}
 
 /// Acquire an exclusive lock for recording
 /// Returns the lock file handle that must be kept alive during recording
@@ -296,8 +327,8 @@ pub fn stop_recording(audio_file_override: Option<&str>) -> Result<Option<String
 }
 
 /// Common function to start recording audio
-pub fn start_recording(backend_name: &str) -> Result<()> {
-    debug!("Starting recording with backend: {}", backend_name);
+pub fn start_recording() -> Result<()> {
+    debug!("Starting recording...");
     
     let uid = unsafe { libc::getuid() };
     let runtime_dir = crate::helpers::get_runtime_dir();
@@ -346,10 +377,11 @@ pub fn start_recording(backend_name: &str) -> Result<()> {
         .context("Failed to write PID file")?;
     debug!("Wrote PID {} to {}", pid, PID_FILE);
 
-    // Get model from environment/state for notification
+    // Get config from environment for notification
     let model = crate::helpers::resolve_model(None);
+    let backend = crate::helpers::resolve_backend(None);
     let acceleration = crate::helpers::get_acceleration_type();
-    let recording_msg = format!("🎤 Recording... (release to stop)\nBackend: {} ({}) | Model: {}", backend_name, acceleration, model);
+    let recording_msg = format!("Recording... (release to stop)\nBackend: {} ({}) | Model: {}", backend, acceleration, model);
     
     send_notification("Voice Input", &recording_msg, 30000);
 

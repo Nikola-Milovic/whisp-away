@@ -1,6 +1,5 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::process::Command;
-use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
 pub fn is_process_running(pid: u32) -> bool {
@@ -34,15 +33,6 @@ pub fn wav_to_samples(wav_data: &[u8]) -> Result<Vec<f32>> {
     Ok(samples)
 }
 
-/// Tray state stored in runtime dir
-#[derive(Serialize, Deserialize, Clone)]
-pub struct TrayState {
-    pub model: String,
-    pub backend: String,
-    #[serde(default)]
-    pub use_clipboard: bool,
-}
-
 /// Get the runtime directory (XDG_RUNTIME_DIR or /tmp fallback)
 pub fn get_runtime_dir() -> String {
     std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| {
@@ -51,66 +41,48 @@ pub fn get_runtime_dir() -> String {
     })
 }
 
-/// Get the tray state file path
-fn get_state_file() -> String {
-    format!("{}/whisp-away-state.json", get_runtime_dir())
-}
-
-/// Read current tray state if available
-pub fn read_tray_state() -> Option<TrayState> {
-    let state_file = get_state_file();
-    debug!("Reading tray state from: {}", state_file);
-    if let Ok(content) = std::fs::read_to_string(&state_file) {
-        match serde_json::from_str::<TrayState>(&content) {
-            Ok(state) => {
-                debug!("Tray state loaded: backend={}, model={}, clipboard={}", 
-                       state.backend, state.model, state.use_clipboard);
-                Some(state)
-            }
-            Err(e) => {
-                debug!("Failed to parse tray state: {}", e);
-                None
-            }
-        }
-    } else {
-        debug!("No tray state file found");
-        None
+/// Resolves the socket path with priority:
+/// 1. Command-line argument (explicit override)
+/// 2. WA_WHISPER_SOCKET env var (set via NixOS config)
+/// 3. Default to "/tmp/whisp-away-daemon.sock"
+pub fn resolve_socket_path(arg: Option<String>) -> String {
+    if let Some(path) = arg {
+        debug!("Using socket path from command-line: {}", path);
+        return path;
     }
+    
+    let path = std::env::var("WA_WHISPER_SOCKET")
+        .unwrap_or_else(|_| "/tmp/whisp-away-daemon.sock".to_string());
+    debug!("Using socket path from env/default: {}", path);
+    path
 }
 
-/// Write tray state
-pub fn write_tray_state(state: &TrayState) -> Result<()> {
-    let state_file = get_state_file();
-    let runtime_dir = get_runtime_dir();
+/// Resolves the backend with priority:
+/// 1. Command-line argument (explicit override)
+/// 2. WA_WHISPER_BACKEND env var (set via NixOS config)
+/// 3. Default to "faster-whisper"
+pub fn resolve_backend(arg: Option<String>) -> String {
+    if let Some(backend) = arg {
+        debug!("Using backend from command-line: {}", backend);
+        return backend;
+    }
     
-    // Ensure runtime dir exists
-    std::fs::create_dir_all(&runtime_dir).ok();
-    
-    let json = serde_json::to_string_pretty(state)?;
-    std::fs::write(state_file, json)?;
-    Ok(())
+    let backend = std::env::var("WA_WHISPER_BACKEND")
+        .unwrap_or_else(|_| "faster-whisper".to_string());
+    debug!("Using backend from env/default: {}", backend);
+    backend
 }
 
 /// Resolves the model to use with priority:
-/// 1. Command-line argument
-/// 2. Tray state file
-/// 3. WA_WHISPER_MODEL env var
-/// 4. Default to "medium.en"
+/// 1. Command-line argument (explicit override)
+/// 2. WA_WHISPER_MODEL env var (set via NixOS config)
+/// 3. Default to "base.en"
 pub fn resolve_model(arg: Option<String>) -> String {
-    // Priority 1: Command-line argument
     if let Some(model) = arg {
         debug!("Using model from command-line: {}", model);
         return model;
     }
     
-    // Priority 2: Tray state
-    if let Some(state) = read_tray_state() {
-        debug!("Using model from tray state: {}", state.model);
-        return state.model;
-    }
-    
-    // Priority 3: Environment variable
-    // Priority 4: Default
     let model = std::env::var("WA_WHISPER_MODEL").unwrap_or_else(|_| "base.en".to_string());
     debug!("Using model from env/default: {}", model);
     model
@@ -152,25 +124,19 @@ pub fn send_notification(title: &str, message: &str, timeout_ms: u32) {
 }
 
 /// Resolves whether to use clipboard with priority:
-/// 1. Command-line argument
-/// 2. Tray state file
-/// 3. WA_USE_CLIPBOARD env var
-/// 4. Default to false
+/// 1. Command-line argument (explicit override)
+/// 2. WA_USE_CLIPBOARD env var (set via NixOS config)
+/// 3. Default to false
 pub fn resolve_use_clipboard(arg: Option<bool>) -> bool {
-    // Priority 1: Command-line argument
     if let Some(use_clipboard) = arg {
+        debug!("Using clipboard setting from command-line: {}", use_clipboard);
         return use_clipboard;
     }
     
-    // Priority 2: Tray state
-    if let Some(state) = read_tray_state() {
-        return state.use_clipboard;
-    }
-    
-    // Priority 3: Environment variable
-    // Priority 4: Default
-    std::env::var("WA_USE_CLIPBOARD")
+    let use_clipboard = std::env::var("WA_USE_CLIPBOARD")
         .unwrap_or_else(|_| "false".to_string())
-        .to_lowercase() == "true"
+        .to_lowercase() == "true";
+    debug!("Using clipboard setting from env/default: {}", use_clipboard);
+    use_clipboard
 }
 

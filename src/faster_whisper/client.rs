@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::fs;
-use std::process::Command;
 use tracing::{debug, warn};
 use crate::recording;
 use crate::socket;

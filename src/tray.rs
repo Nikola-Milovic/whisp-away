@@ -7,7 +7,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use crate::helpers::{TrayState, write_tray_state};
+// Tray uses env vars for defaults, session state is in-memory only
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DaemonStatus {
@@ -47,29 +47,11 @@ impl Drop for VoiceInputTray {
 
 impl VoiceInputTray {
     fn new(daemon_type: String) -> Self {
-        let tray = Self {
+        Self {
             status: Arc::new(Mutex::new(DaemonStatus::default())),
             daemon_type,
             daemon_process: Arc::new(Mutex::new(None)),
-        };
-        
-        // Save initial state
-        if let Err(e) = tray.save_state() {
-            eprintln!("Warning: Failed to save initial tray state: {}", e);
         }
-        
-        tray
-    }
-    
-    fn save_state(&self) -> Result<()> {
-        let status = self.status.lock().unwrap();
-        let state = TrayState {
-            model: status.model.clone(),
-            backend: self.daemon_type.clone(),
-            use_clipboard: status.use_clipboard,
-        };
-        drop(status);
-        write_tray_state(&state)
     }
     
     fn start_daemon_process(&self) -> Result<()> {
@@ -556,17 +538,12 @@ impl Tray for VoiceInputTray {
                     let new_mode = status.use_clipboard;
                     drop(status);
                     
-                    // Save state
-                    if let Err(e) = tray.save_state() {
-                        eprintln!("Warning: Failed to save clipboard state: {}", e);
-                    }
-                    
-                    // Show notification
+                    // Show notification (setting only persists for this session)
                     let mode_text = if new_mode { "Clipboard" } else { "Type at Cursor" };
                     let _ = Command::new("notify-send")
                         .args(&[
                             "Voice Input",
-                            &format!("Output mode: {}", mode_text),
+                            &format!("Output mode: {} (session)", mode_text),
                             "-t", "2000",
                         ])
                         .spawn();
@@ -653,13 +630,8 @@ impl Tray for VoiceInputTray {
                     }
                 }
                 
-                // Switch daemon type
+                // Switch daemon type (session only, env var is the persistent config)
                 tray.daemon_type = other_daemon_clone.clone();
-                
-                // Save new backend state
-                if let Err(e) = tray.save_state() {
-                    eprintln!("Warning: Failed to save tray state after backend switch: {}", e);
-                }
                 
                 // Start the new daemon
                 match tray.start_daemon() {

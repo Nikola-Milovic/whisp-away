@@ -16,8 +16,7 @@ const SOCKET_PATH: &str = "/tmp/whisp-away-daemon.sock";
 
 #[tokio::main]
 pub async fn run_daemon(model_path: &str) -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
+    // Tracing is already in main()
     
     // Create and run daemon
     let daemon = WhisperDaemon::new(model_path)?;
