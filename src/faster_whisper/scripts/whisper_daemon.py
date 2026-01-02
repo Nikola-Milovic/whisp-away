@@ -69,19 +69,28 @@ class WhisperDaemon:
     def transcribe(self, audio_path):
         """Transcribe an audio file."""
         try:
-            segments, info = self.model.transcribe(
-                audio_path,
+            # Check if VAD should be disabled (for debugging)
+            use_vad = os.environ.get("WHISPER_VAD", "true").lower() != "false"
+            
+            transcribe_kwargs = dict(
                 language="en",
                 beam_size=5,
                 best_of=5,
                 temperature=0.0,
-                vad_filter=True,
-                vad_parameters=dict(
-                    min_silence_duration_ms=300,  # Reduced for snappier detection
-                    speech_pad_ms=100,  # Reduced padding
-                    threshold=0.5
-                )
             )
+            
+            if use_vad:
+                transcribe_kwargs["vad_filter"] = True
+                transcribe_kwargs["vad_parameters"] = dict(
+                    min_silence_duration_ms=300,
+                    speech_pad_ms=200,  # More padding around speech
+                    threshold=0.3,  # Lower threshold = more sensitive to speech
+                )
+            else:
+                logger.info("VAD disabled")
+                transcribe_kwargs["vad_filter"] = False
+            
+            segments, info = self.model.transcribe(audio_path, **transcribe_kwargs)
             
             # Collect text
             text = " ".join(segment.text.strip() for segment in segments)

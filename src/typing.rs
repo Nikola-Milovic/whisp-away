@@ -1,33 +1,36 @@
 use anyhow::{Context, Result};
 use std::process::{Command, Stdio};
 use std::io::Write;
+use tracing::debug;
+use crate::helpers;
 
 /// Output transcribed text to clipboard or type at cursor
 pub fn output_text(text: &str, use_clipboard: bool, backend_name: &str) -> Result<()> {
+    debug!("output_text called: text='{}', use_clipboard={}, backend={}", 
+           if text.len() > 50 { &text[..50] } else { text },
+           use_clipboard, backend_name);
+    
     if text.trim().is_empty() {
-        Command::new("notify-send")
-            .args(&[
-                "Voice Input",
-                &format!("⚠️ No speech detected\nBackend: {}", backend_name),
-                "-t", "2000",
-                "-h", "string:x-canonical-private-synchronous:voice"
-            ])
-            .spawn()?;
+        debug!("No speech detected (empty text received)");
+        helpers::send_notification(
+            "Voice Input",
+            &format!("⚠️ No speech detected\nBackend: {}", backend_name),
+            2000
+        );
         return Ok(());
     }
 
     if use_clipboard {
+        debug!("Copying to clipboard ({} chars)", text.trim().len());
         copy_to_clipboard(text.trim())?;
         
-        Command::new("notify-send")
-            .args(&[
-                "Voice Input",
-                &format!("✅ Copied to clipboard\nBackend: {}", backend_name),
-                "-t", "1000",
-                "-h", "string:x-canonical-private-synchronous:voice"
-            ])
-            .spawn()?;
+        helpers::send_notification(
+            "Voice Input",
+            &format!("✅ Copied to clipboard\nBackend: {}", backend_name),
+            1000
+        );
     } else {
+        debug!("Typing at cursor ({} chars)", text.trim().len());
         // Small delay before typing
         std::thread::sleep(std::time::Duration::from_millis(30));
         
@@ -39,6 +42,8 @@ pub fn output_text(text: &str, use_clipboard: bool, backend_name: &str) -> Resul
 
 /// Type text at cursor using wtype (Wayland) or xdotool (X11)
 fn type_at_cursor(text: &str, backend_name: &str) -> Result<()> {
+    debug!("Attempting to type at cursor using wtype (Wayland)");
+    
     // Try wtype first (Wayland)
     let wtype_result = Command::new("wtype")
         .arg(text)
@@ -47,35 +52,32 @@ fn type_at_cursor(text: &str, backend_name: &str) -> Result<()> {
     
     if let Ok(status) = wtype_result {
         if status.success() {
-            // Show success notification
-            Command::new("notify-send")
-                .args(&[
-                    "Voice Input",
-                    &format!("✅ Transcribed\nBackend: {}", backend_name),
-                    "-t", "1000",
-                    "-h", "string:x-canonical-private-synchronous:voice"
-                ])
-                .spawn()?;
+            debug!("Successfully typed using wtype");
+            helpers::send_notification(
+                "Voice Input",
+                &format!("✅ Transcribed\nBackend: {}", backend_name),
+                1000
+            );
             return Ok(());
         }
+        debug!("wtype failed with status: {}", status);
     }
+    
+    debug!("Falling back to xdotool (X11)");
     
     // Fallback to xdotool (X11)
     Command::new("xdotool")
-        .args(&["type", "--clearmodifiers", "--", text])
+        .args(["type", "--clearmodifiers", "--", text])
         .spawn()
         .context("Failed to run typing command (tried wtype and xdotool)")?
         .wait()?;
     
-    // Show success notification
-    Command::new("notify-send")
-        .args(&[
-            "Voice Input",
-            &format!("✅ Transcribed\nBackend: {}", backend_name),
-            "-t", "1000",
-            "-h", "string:x-canonical-private-synchronous:voice"
-        ])
-        .spawn()?;
+    debug!("Successfully typed using xdotool");
+    helpers::send_notification(
+        "Voice Input",
+        &format!("✅ Transcribed\nBackend: {}", backend_name),
+        1000
+    );
     
     Ok(())
 }

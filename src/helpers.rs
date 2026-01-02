@@ -1,13 +1,16 @@
 use anyhow::{anyhow, Result};
 use std::process::Command;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, trace};
 
 pub fn is_process_running(pid: u32) -> bool {
-    Command::new("kill")
-        .args(&["-0", &pid.to_string()])
+    let running = Command::new("kill")
+        .args(["-0", &pid.to_string()])
         .status()
         .map(|s| s.success())
-        .unwrap_or(false)
+        .unwrap_or(false);
+    trace!("Process {} running: {}", pid, running);
+    running
 }
 
 
@@ -56,9 +59,21 @@ fn get_state_file() -> String {
 /// Read current tray state if available
 pub fn read_tray_state() -> Option<TrayState> {
     let state_file = get_state_file();
-    if let Ok(content) = std::fs::read_to_string(state_file) {
-        serde_json::from_str(&content).ok()
+    debug!("Reading tray state from: {}", state_file);
+    if let Ok(content) = std::fs::read_to_string(&state_file) {
+        match serde_json::from_str::<TrayState>(&content) {
+            Ok(state) => {
+                debug!("Tray state loaded: backend={}, model={}, clipboard={}", 
+                       state.backend, state.model, state.use_clipboard);
+                Some(state)
+            }
+            Err(e) => {
+                debug!("Failed to parse tray state: {}", e);
+                None
+            }
+        }
     } else {
+        debug!("No tray state file found");
         None
     }
 }
@@ -84,22 +99,56 @@ pub fn write_tray_state(state: &TrayState) -> Result<()> {
 pub fn resolve_model(arg: Option<String>) -> String {
     // Priority 1: Command-line argument
     if let Some(model) = arg {
+        debug!("Using model from command-line: {}", model);
         return model;
     }
     
     // Priority 2: Tray state
     if let Some(state) = read_tray_state() {
+        debug!("Using model from tray state: {}", state.model);
         return state.model;
     }
     
     // Priority 3: Environment variable
     // Priority 4: Default
-    std::env::var("WA_WHISPER_MODEL").unwrap_or_else(|_| "base.en".to_string())
+    let model = std::env::var("WA_WHISPER_MODEL").unwrap_or_else(|_| "base.en".to_string());
+    debug!("Using model from env/default: {}", model);
+    model
 }
 
 /// Get the acceleration type from environment variable
 pub fn get_acceleration_type() -> String {
     std::env::var("WA_ACCELERATION_TYPE").unwrap_or_else(|_| "unknown".to_string())
+}
+
+/// Send a notification, handling errors gracefully
+pub fn send_notification(title: &str, message: &str, timeout_ms: u32) {
+    use std::process::Command;
+    debug!("Sending notification: {} - {}", title, message);
+    
+    match Command::new("notify-send")
+        .args([
+            title,
+            message,
+            "-t", &timeout_ms.to_string(),
+            "-h", "string:x-canonical-private-synchronous:voice"
+        ])
+        .output()
+    {
+        Ok(output) => {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                debug!("notify-send failed: {}", stderr);
+                // Fallback: print to console
+                eprintln!("[whisp-away] {}: {}", title, message);
+            }
+        }
+        Err(e) => {
+            debug!("Failed to run notify-send: {}", e);
+            // Fallback: print to console
+            eprintln!("[whisp-away] {}: {}", title, message);
+        }
+    }
 }
 
 /// Resolves whether to use clipboard with priority:

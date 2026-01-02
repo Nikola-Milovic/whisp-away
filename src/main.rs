@@ -1,5 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
+use tracing::{debug, Level};
+use tracing_subscriber::FmtSubscriber;
 
 mod tray;
 mod helpers;
@@ -110,6 +112,23 @@ fn resolve_backend(backend: &Backend) -> String {
 }
 
 fn main() -> Result<()> {
+    // Initialize logging - quiet by default, use RUST_LOG=debug for verbose output
+    let log_level = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(Level::WARN);
+    
+    FmtSubscriber::builder()
+        .with_max_level(log_level)
+        .with_target(false)
+        .with_thread_ids(false)
+        .with_file(false)
+        .with_line_number(false)
+        .compact()
+        .init();
+    
+    debug!("whisp-away starting");
+    
     let cli = Cli::parse();
 
     match cli.command {
@@ -117,6 +136,7 @@ fn main() -> Result<()> {
         Commands::Start { backend } => {
             // Resolve backend if TrayDefined
             let resolved_backend = resolve_backend(&backend);
+            debug!("Start command - resolved backend: {}", resolved_backend);
             
             match resolved_backend.as_str() {
                 "whisper-cpp" => recording::start_recording("whisper-cpp"),
@@ -128,9 +148,12 @@ fn main() -> Result<()> {
         Commands::Stop { backend, bindings, model, audio_file, socket_path, whisper_path, clipboard } => {
             // Resolve backend (handles TrayDefined case)
             let resolved_backend = resolve_backend(&backend);
+            debug!("Stop command - resolved backend: {}, bindings: {}, model: {:?}", 
+                   resolved_backend, bindings, model);
             
             let socket_path = socket_path.unwrap_or_else(|| "/tmp/whisp-away-daemon.sock".to_string());
             let use_clipboard = helpers::resolve_use_clipboard(clipboard);
+            debug!("Socket path: {}, use_clipboard: {}", socket_path, use_clipboard);
             
             match resolved_backend.as_str() {
                 "whisper-cpp" => {
@@ -148,11 +171,13 @@ fn main() -> Result<()> {
         Commands::Daemon { backend, model, socket_path } => {
             let resolved_backend = resolve_backend(&backend);
             let model = helpers::resolve_model(model);
+            debug!("Daemon command - resolved backend: {}, model: {}", resolved_backend, model);
             
             match resolved_backend.as_str() {
                 "whisper-cpp" => whisper_cpp::run_daemon(&model),
                 "faster-whisper" => {
                     let socket_path = socket_path.unwrap_or_else(|| "/tmp/whisp-away-daemon.sock".to_string());
+                    debug!("Starting faster-whisper daemon on socket: {}", socket_path);
                     faster_whisper::run_daemon(&model, &socket_path)
                 }
                 unknown => Err(anyhow::anyhow!("Unknown backend: {}", unknown)),
@@ -161,6 +186,7 @@ fn main() -> Result<()> {
         
         Commands::Tray { backend } => {
             let daemon_type = resolve_backend(&backend);
+            debug!("Tray command - daemon type: {}", daemon_type);
             tokio::runtime::Runtime::new()?.block_on(tray::run_tray(daemon_type))
         }
     }

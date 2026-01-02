@@ -1,8 +1,9 @@
 use anyhow::{Context, Result};
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
-use std::process::Command;
+use tracing::{debug, warn};
 use crate::typing;
+use crate::helpers;
 
 /// Send a transcription request to the daemon via Unix socket
 pub fn send_transcription_request(
@@ -11,10 +12,15 @@ pub fn send_transcription_request(
     backend_name: &str,
     use_clipboard: bool,
 ) -> Result<()> {
+    debug!("Connecting to daemon at {}", socket_path);
+    
     match UnixStream::connect(socket_path) {
         Ok(mut stream) => {
+            debug!("Connected to daemon, sending transcription request for: {}", audio_file);
+            
             // Send request
             let request = format!(r#"{{"audio_path": "{}"}}"#, audio_file);
+            debug!("Sending request: {}", request);
             stream.write_all(request.as_bytes())
                 .context("Failed to send request to daemon")?;
             
@@ -22,6 +28,8 @@ pub fn send_transcription_request(
             let mut response = String::new();
             stream.read_to_string(&mut response)
                 .context("Failed to read response from daemon")?;
+            
+            debug!("Received response: {}", response);
             
             // Check if transcription was successful
             let success = response.contains(r#""success":true"#) || response.contains(r#""success": true"#);
@@ -31,31 +39,31 @@ pub fn send_transcription_request(
                 let text = extract_text_from_response(&response);
                 
                 if let Some(transcribed_text) = text {
+                    debug!("Transcription result: '{}' ({} chars)", 
+                          if transcribed_text.len() > 50 { &transcribed_text[..50] } else { &transcribed_text },
+                          transcribed_text.len());
                     typing::output_text(transcribed_text.trim(), use_clipboard, &format!("{} daemon", backend_name))?;
                 } else {
-                    Command::new("notify-send")
-                        .args(&[
-                            "Voice Input",
-                            &format!("⚠️ Could not parse response\nBackend: {}", backend_name),
-                            "-t", "2000",
-                            "-h", "string:x-canonical-private-synchronous:voice"
-                        ])
-                        .spawn()?;
+                    debug!("Could not parse text from response");
+                    helpers::send_notification(
+                        "Voice Input",
+                        &format!("⚠️ Could not parse response\nBackend: {}", backend_name),
+                        2000
+                    );
                 }
             } else {
-                Command::new("notify-send")
-                    .args(&[
-                        "Voice Input",
-                        &format!("❌ Transcription failed\nBackend: {}", backend_name),
-                        "-t", "2000",
-                        "-h", "string:x-canonical-private-synchronous:voice"
-                    ])
-                    .spawn()?;
+                warn!("Transcription failed, response: {}", response);
+                helpers::send_notification(
+                    "Voice Input",
+                    &format!("❌ Transcription failed\nBackend: {}", backend_name),
+                    2000
+                );
             }
             
             Ok(())
         }
         Err(e) => {
+            debug!("Failed to connect to daemon: {}", e);
             // Return the error so the caller can handle fallback logic
             Err(anyhow::anyhow!("Failed to connect to daemon: {}", e))
         }

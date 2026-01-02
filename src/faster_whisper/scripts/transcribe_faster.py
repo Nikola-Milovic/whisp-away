@@ -49,14 +49,24 @@ def main():
             download_root=cache_dir
         )
         
-        # Transcribe
-        segments, info = model.transcribe(
-            audio_file,
+        # Check if VAD should be disabled (for debugging)
+        use_vad = os.environ.get("WHISPER_VAD", "true").lower() != "false"
+        
+        transcribe_kwargs = dict(
             language='en',
             beam_size=5,
-            vad_filter=True,
-            vad_parameters=dict(min_silence_duration_ms=500)
         )
+        
+        if use_vad:
+            transcribe_kwargs["vad_filter"] = True
+            transcribe_kwargs["vad_parameters"] = dict(
+                min_silence_duration_ms=300,
+                speech_pad_ms=200,  # More padding around speech
+                threshold=0.3,  # Lower threshold = more sensitive
+            )
+        
+        # Transcribe
+        segments, info = model.transcribe(audio_file, **transcribe_kwargs)
         
         # Output transcribed text
         text = ' '.join(segment.text.strip() for segment in segments)
