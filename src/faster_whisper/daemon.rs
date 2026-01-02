@@ -1,7 +1,19 @@
 use anyhow::{Context, Result};
 use std::process::Command;
+use crate::helpers::{DaemonConfig, write_daemon_config, resolve_use_clipboard};
 
 pub fn run_daemon(model: &str, socket_path: &str) -> Result<()> {
+    // Write daemon config so CLI commands can read our settings
+    let config = DaemonConfig {
+        backend: Some("faster-whisper".to_string()),
+        model: Some(model.to_string()),
+        socket_path: Some(socket_path.to_string()),
+        use_clipboard: Some(resolve_use_clipboard(None)),
+    };
+    if let Err(e) = write_daemon_config(&config) {
+        eprintln!("Warning: Failed to write daemon config: {}", e);
+    }
+    
     // Get Python interpreter and script paths from environment
     let python_path = std::env::var("FASTER_WHISPER_PYTHON")
         .context("FASTER_WHISPER_PYTHON not set")?;

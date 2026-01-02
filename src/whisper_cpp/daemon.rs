@@ -10,13 +10,23 @@ use tracing::{error, info, warn};
 use whisper_rs::{WhisperContext, WhisperContextParameters, FullParams, SamplingStrategy};
 #[cfg(feature = "openvino")]
 use whisper_rs::WhisperState;
-use crate::helpers::wav_to_samples;
+use crate::helpers::{wav_to_samples, DaemonConfig, write_daemon_config, resolve_use_clipboard, resolve_socket_path};
 
 const SOCKET_PATH: &str = "/tmp/whisp-away-daemon.sock";
 
 #[tokio::main]
 pub async fn run_daemon(model_path: &str) -> Result<()> {
-    // Tracing is already in main()
+    // Write daemon config so CLI commands can read our settings
+    let socket_path = resolve_socket_path(None);
+    let config = DaemonConfig {
+        backend: Some("whisper-cpp".to_string()),
+        model: Some(model_path.to_string()),
+        socket_path: Some(socket_path),
+        use_clipboard: Some(resolve_use_clipboard(None)),
+    };
+    if let Err(e) = write_daemon_config(&config) {
+        eprintln!("Warning: Failed to write daemon config: {}", e);
+    }
     
     // Create and run daemon
     let daemon = WhisperDaemon::new(model_path)?;

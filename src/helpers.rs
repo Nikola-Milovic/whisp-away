@@ -1,6 +1,56 @@
 use anyhow::Result;
 use std::process::Command;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
+
+/// Daemon configuration - written by daemon, read by CLI commands
+/// This ensures CLI commands use the same settings as the running daemon
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DaemonConfig {
+    pub backend: Option<String>,
+    pub model: Option<String>,
+    pub socket_path: Option<String>,
+    pub use_clipboard: Option<bool>,
+}
+
+/// Get the path to the daemon config file
+fn get_daemon_config_path() -> String {
+    format!("{}/whisp-away-daemon.json", get_runtime_dir())
+}
+
+/// Write daemon configuration (called when daemon starts)
+pub fn write_daemon_config(config: &DaemonConfig) -> Result<()> {
+    let config_path = get_daemon_config_path();
+    let runtime_dir = get_runtime_dir();
+    
+    // Ensure runtime dir exists
+    std::fs::create_dir_all(&runtime_dir).ok();
+    
+    let json = serde_json::to_string_pretty(config)?;
+    std::fs::write(&config_path, json)?;
+    debug!("Wrote daemon config to: {}", config_path);
+    Ok(())
+}
+
+/// Read daemon configuration (called by CLI commands)
+pub fn read_daemon_config() -> Option<DaemonConfig> {
+    let config_path = get_daemon_config_path();
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        match serde_json::from_str::<DaemonConfig>(&content) {
+            Ok(config) => {
+                trace!("Read daemon config from: {}", config_path);
+                Some(config)
+            }
+            Err(e) => {
+                debug!("Failed to parse daemon config: {}", e);
+                None
+            }
+        }
+    } else {
+        trace!("No daemon config file found at: {}", config_path);
+        None
+    }
+}
 
 pub fn is_process_running(pid: u32) -> bool {
     let running = Command::new("kill")
@@ -44,47 +94,84 @@ pub fn get_runtime_dir() -> String {
 /// Resolves the socket path with priority:
 /// 1. Command-line argument (explicit override)
 /// 2. WA_WHISPER_SOCKET env var (set via NixOS config)
-/// 3. Default to "/tmp/whisp-away-daemon.sock"
+/// 3. Daemon config file (written by running daemon)
+/// 4. Default to "/tmp/whisp-away-daemon.sock"
 pub fn resolve_socket_path(arg: Option<String>) -> String {
     if let Some(path) = arg {
         debug!("Using socket path from command-line: {}", path);
         return path;
     }
     
-    let path = std::env::var("WA_WHISPER_SOCKET")
-        .unwrap_or_else(|_| "/tmp/whisp-away-daemon.sock".to_string());
-    debug!("Using socket path from env/default: {}", path);
+    if let Ok(path) = std::env::var("WA_WHISPER_SOCKET") {
+        debug!("Using socket path from env: {}", path);
+        return path;
+    }
+    
+    if let Some(config) = read_daemon_config() {
+        if let Some(path) = config.socket_path {
+            debug!("Using socket path from daemon config: {}", path);
+            return path;
+        }
+    }
+    
+    let path = "/tmp/whisp-away-daemon.sock".to_string();
+    debug!("Using default socket path: {}", path);
     path
 }
 
 /// Resolves the backend with priority:
 /// 1. Command-line argument (explicit override)
 /// 2. WA_WHISPER_BACKEND env var (set via NixOS config)
-/// 3. Default to "faster-whisper"
+/// 3. Daemon config file (written by running daemon)
+/// 4. Default to "faster-whisper"
 pub fn resolve_backend(arg: Option<String>) -> String {
     if let Some(backend) = arg {
         debug!("Using backend from command-line: {}", backend);
         return backend;
     }
     
-    let backend = std::env::var("WA_WHISPER_BACKEND")
-        .unwrap_or_else(|_| "faster-whisper".to_string());
-    debug!("Using backend from env/default: {}", backend);
+    if let Ok(backend) = std::env::var("WA_WHISPER_BACKEND") {
+        debug!("Using backend from env: {}", backend);
+        return backend;
+    }
+    
+    if let Some(config) = read_daemon_config() {
+        if let Some(backend) = config.backend {
+            debug!("Using backend from daemon config: {}", backend);
+            return backend;
+        }
+    }
+    
+    let backend = "faster-whisper".to_string();
+    debug!("Using default backend: {}", backend);
     backend
 }
 
 /// Resolves the model to use with priority:
 /// 1. Command-line argument (explicit override)
 /// 2. WA_WHISPER_MODEL env var (set via NixOS config)
-/// 3. Default to "base.en"
+/// 3. Daemon config file (written by running daemon)
+/// 4. Default to "base.en"
 pub fn resolve_model(arg: Option<String>) -> String {
     if let Some(model) = arg {
         debug!("Using model from command-line: {}", model);
         return model;
     }
     
-    let model = std::env::var("WA_WHISPER_MODEL").unwrap_or_else(|_| "base.en".to_string());
-    debug!("Using model from env/default: {}", model);
+    if let Ok(model) = std::env::var("WA_WHISPER_MODEL") {
+        debug!("Using model from env: {}", model);
+        return model;
+    }
+    
+    if let Some(config) = read_daemon_config() {
+        if let Some(model) = config.model {
+            debug!("Using model from daemon config: {}", model);
+            return model;
+        }
+    }
+    
+    let model = "base.en".to_string();
+    debug!("Using default model: {}", model);
     model
 }
 
@@ -126,17 +213,28 @@ pub fn send_notification(title: &str, message: &str, timeout_ms: u32) {
 /// Resolves whether to use clipboard with priority:
 /// 1. Command-line argument (explicit override)
 /// 2. WA_USE_CLIPBOARD env var (set via NixOS config)
-/// 3. Default to false
+/// 3. Daemon config file (written by running daemon)
+/// 4. Default to false
 pub fn resolve_use_clipboard(arg: Option<bool>) -> bool {
     if let Some(use_clipboard) = arg {
         debug!("Using clipboard setting from command-line: {}", use_clipboard);
         return use_clipboard;
     }
     
-    let use_clipboard = std::env::var("WA_USE_CLIPBOARD")
-        .unwrap_or_else(|_| "false".to_string())
-        .to_lowercase() == "true";
-    debug!("Using clipboard setting from env/default: {}", use_clipboard);
-    use_clipboard
+    if let Ok(val) = std::env::var("WA_USE_CLIPBOARD") {
+        let use_clipboard = val.to_lowercase() == "true";
+        debug!("Using clipboard setting from env: {}", use_clipboard);
+        return use_clipboard;
+    }
+    
+    if let Some(config) = read_daemon_config() {
+        if let Some(use_clipboard) = config.use_clipboard {
+            debug!("Using clipboard setting from daemon config: {}", use_clipboard);
+            return use_clipboard;
+        }
+    }
+    
+    debug!("Using default clipboard setting: false");
+    false
 }
 
