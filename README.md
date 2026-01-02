@@ -10,6 +10,7 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
 - **Model Preloading**: Daemon mode keeps models in memory for instant transcription
 - **System Tray Control**: Start/stop daemon and toggle output mode
 - **NixOS Integration**: First-class NixOS and Home Manager support
+- **Single Instance**: Only one recording at a time, automatic cleanup of old files
 
 ## Installation
 
@@ -25,8 +26,13 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
   services.whisp-away = {
     enable = true;
     accelerationType = "vulkan";  # or "cuda", "openvino", "cpu" - requires rebuild
+    defaultBackend = "faster-whisper";  # or "whisper-cpp"
+    defaultModel = "base.en";     # Model to use
     useClipboard = false;         # true = copy to clipboard, false = type at cursor
-    useCrane = false;             # Enable if you want faster rebuilds when developing
+    
+    # Optional: Auto-start services on login
+    autoStartDaemon = true;       # Keep model preloaded for fast transcription
+    autoStartTray = true;         # System tray for control
   };
 }
 ```
@@ -35,29 +41,37 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
 
 ### Keybinds (Recommended)
 
-Configure your keybinds to enable push-to-talk:
+Configure push-to-talk in your window manager. Example for Hyprland:
 
-For example in Hyprland config, push to talk and release to transcribe:
 ```conf
 # section = the § key on Swedish keyboards (top-left, below Esc)
 bind = ,section,exec, whisp-away start
 bindr = ,section,exec, whisp-away stop
 ```
 
-### System Tray (Recommended)
+### System Tray
 
-Improve transcription speed by preloading models.
+The tray icon provides easy control:
+- **Left-click**: Start/stop daemon
+- **Right-click**: Toggle clipboard mode, check status, switch backends
 
-Access from your `desktop apps`, or start from a terminal:
-
+Start manually if not using `autoStartTray`:
 ```bash
-whisp-away tray                    # Uses default backend ($WA_WHISPER_BACKEND)
-whisp-away tray -b faster-whisper  # Use faster-whisper backend
+whisp-away tray
 ```
 
-The tray icon lets you:
-- **Left-click**: Start/stop daemon for preloaded models
-- **Right-click**: Open menu to toggle output mode (clipboard/typing), check status, and switch backends
+### Daemon Mode
+
+Keep the model preloaded for instant transcription:
+
+```bash
+# Start daemon (or use autoStartDaemon = true in NixOS config)
+whisp-away daemon
+
+# In another terminal, use start/stop as normal
+whisp-away start   # Begin recording
+whisp-away stop    # Stop and transcribe (instant with daemon)
+```
 
 ### Command Line
 
@@ -70,6 +84,9 @@ whisp-away stop               # Stop and transcribe
 whisp-away stop --model medium.en
 whisp-away stop --backend faster-whisper
 whisp-away stop --clipboard true     # Copy to clipboard instead of typing
+
+# Transcribe an existing audio file
+whisp-away stop --audio-file recording.wav
 ```
 
 ## Models & Performance
@@ -82,13 +99,11 @@ whisp-away stop --clipboard true     # Copy to clipboard instead of typing
 | **medium.en** | 769 MB | Slow | Excellent | Professional transcription |
 | **large-v3** | 1550 MB | Slowest | Best | Maximum accuracy, multilingual |
 
-Models download automatically on first use, and are stored in `~/.cache/whisper-cpp/models/` (GGML models for whisper.cpp) and `~/.cache/faster-whisper/` (CTranslate2 models for faster-whisper).
-
-For OpenVINO the GGML models have to be translated into the openVINO format (see docs in the whisper.cpp repo), this hasn't been automized yet.
+Models download automatically on first use and are stored in:
+- `~/.cache/whisper-cpp/models/` (GGML models for whisper.cpp)
+- `~/.cache/faster-whisper/` (CTranslate2 models for faster-whisper)
 
 ## Hardware Acceleration
-
-WhispAway supports multiple acceleration types:
 
 | Type | Backend Support | Hardware |
 |------|----------------|----------|
@@ -99,19 +114,6 @@ WhispAway supports multiple acceleration types:
 
 **Note**: `faster-whisper` only supports CUDA and CPU. The `whisper.cpp` backend supports all acceleration types.
 
-## Building from Source
-
-### With Nix
-```bash
-nix build        # Builds with default settings
-nix develop      # Enter development shell
-```
-
-### With Cargo
-```bash
-cargo build --release --features vulkan
-```
-
 ## Configuration
 
 ### NixOS Module Options
@@ -120,40 +122,95 @@ cargo build --release --features vulkan
 services.whisp-away = {
   enable = true;
   defaultModel = "small.en";        # sets WA_WHISPER_MODEL
-  defaultBackend = "whisper-cpp";   # sets WA_WHISPER_BACKEND
+  defaultBackend = "faster-whisper"; # sets WA_WHISPER_BACKEND
   accelerationType = "vulkan";      # GPU acceleration type
-  useClipboard = false;             # sets WA_USE_CLIPBOARD (false = type, true = clipboard)
-}
+  useClipboard = false;             # sets WA_USE_CLIPBOARD
+  autoStartDaemon = true;           # Start daemon on login
+  autoStartTray = true;             # Start tray on login
+};
 ```
 
 ### Environment Variables
 
-- `WA_WHISPER_MODEL`: Default model (e.g., "small.en")
-- `WA_WHISPER_BACKEND`: Default backend ("whisper-cpp" or "faster-whisper")
-- `WA_USE_CLIPBOARD`: Output mode ("true" = clipboard, "false" = typing at cursor)
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `WA_WHISPER_MODEL` | Model to use | `base.en` |
+| `WA_WHISPER_BACKEND` | Backend (`whisper-cpp` or `faster-whisper`) | `faster-whisper` |
+| `WA_USE_CLIPBOARD` | Output mode (`true`/`false`) | `false` |
+| `RUST_LOG` | Log level (`warn`, `info`, `debug`, `trace`) | `warn` |
+| `WHISPER_VAD` | Enable VAD filter (`true`/`false`) | `true` |
 
 ## Troubleshooting
 
-**Tray icon doesn't appear?**
-- Make sure you have a system tray (GNOME needs an extension)
+### Debug Mode
+
+Enable verbose logging to diagnose issues:
+
+```bash
+RUST_LOG=debug whisp-away start
+RUST_LOG=debug whisp-away stop
+```
+
+### No Speech Detected?
+
+The VAD (Voice Activity Detection) filter may be too aggressive. Try:
+
+1. **Check your microphone** - Record and play back to verify:
+   ```bash
+   pw-record /tmp/test.wav
+   # Speak for a few seconds, then Ctrl+C
+   pw-play /tmp/test.wav
+   ```
+
+2. **Check the right input device is selected** using `pavucontrol` or your desktop audio settings
+
+3. **Disable VAD temporarily** to test:
+   ```bash
+   WHISPER_VAD=false whisp-away daemon
+   ```
+
+### Tray Icon Doesn't Appear?
+
+- Ensure you have a system tray (GNOME needs an extension like AppIndicator)
 - Check if the app is running: `ps aux | grep whisp-away`
+- Try starting manually: `whisp-away tray`
 
-**Transcription is slow?**
-- Use a smaller model (tiny.en or base.en)
+### Transcription is Slow?
+
+- Use a smaller model (`tiny.en` or `base.en`)
 - Enable GPU acceleration if available
-- The daemon pre-loads the model for faster response
+- Use daemon mode (`autoStartDaemon = true`) to keep the model preloaded
 
-**No text appears after recording?**
+### No Text Appears After Recording?
+
 - Check the notification for errors
-- For typing mode: 
-  - Wayland: Verify `wtype` is installed
-  - X11: Verify `xdotool` is installed (automatic fallback)
-- For clipboard mode: Verify `wl-copy` (Wayland) or `xclip` (X11) is installed
-- Try toggling output mode in the tray menu or use `--clipboard true/false`
+- For typing mode (Wayland): Verify `wtype` is installed
+- For typing mode (X11): Verify `xdotool` is installed
+- For clipboard mode: Verify `wl-copy` (Wayland) or `xclip` (X11)
+- Try toggling output mode: `whisp-away stop --clipboard true`
+
+### Recording Issues?
+
+- Ensure PipeWire is running: `systemctl --user status pipewire`
+- Check audio permissions and that your user is in the `audio` group
+- Test recording directly: `pw-record --channels 1 --rate 16000 /tmp/test.wav`
+
+## Building from Source
+
+### With Nix
+```bash
+nix build        # Build with default settings
+nix develop      # Enter development shell
+```
+
+### With Cargo
+```bash
+cargo build --release --features vulkan
+```
 
 ## Project Status
 
-This project is actively maintained and only tested on NixOS. Contributions are welcome!
+This project is actively maintained and primarily tested on NixOS. Contributions are welcome!
 
 ## License
 

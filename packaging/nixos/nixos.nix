@@ -75,28 +75,94 @@ in {
         Can be toggled at runtime via the tray menu.
       '';
     };
-  };
-  
-  config = mkIf cfg.enable {
-    # System-wide package installation
-    environment.systemPackages = [ whisp-away ];
     
-    # Environment variables
-    environment.sessionVariables = {
-      WA_WHISPER_MODEL = cfg.defaultModel;
-      WA_WHISPER_BACKEND = cfg.defaultBackend;
-      WA_WHISPER_SOCKET = "/tmp/whisp-away-daemon.sock";
-      WA_USE_CLIPBOARD = if cfg.useClipboard then "true" else "false";
-    } // optionalAttrs (cfg.accelerationType == "cuda") {
-      CUDA_VISIBLE_DEVICES = "0";
-      LD_LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn}/lib:\${LD_LIBRARY_PATH}";
+    autoStartDaemon = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Automatically start the whisper daemon on login.
+        This keeps the model preloaded in memory for faster transcription.
+        The daemon uses the defaultBackend setting.
+      '';
     };
     
-    # Create cache directories using systemd tmpfiles
-    systemd.user.tmpfiles.rules = [
-      "d %h/.cache/faster-whisper 0755 %u %u -"
-      "d %h/.cache/whisper-cpp 0755 %u %u -"
-      "d %h/.cache/whisper-cpp/models 0755 %u %u -"
-    ];
+    autoStartTray = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Automatically start the system tray icon on login.
+        The tray provides a UI to control the daemon and toggle settings.
+      '';
+    };
   };
+  
+  config = mkIf cfg.enable (mkMerge [
+    {
+      # System-wide package installation
+      environment.systemPackages = [ whisp-away ];
+      
+      # Environment variables
+      environment.sessionVariables = {
+        WA_WHISPER_MODEL = cfg.defaultModel;
+        WA_WHISPER_BACKEND = cfg.defaultBackend;
+        WA_WHISPER_SOCKET = "/tmp/whisp-away-daemon.sock";
+        WA_USE_CLIPBOARD = if cfg.useClipboard then "true" else "false";
+      } // optionalAttrs (cfg.accelerationType == "cuda") {
+        CUDA_VISIBLE_DEVICES = "0";
+        LD_LIBRARY_PATH = "${pkgs.cudaPackages.cudatoolkit}/lib:${pkgs.cudaPackages.cudnn}/lib:\${LD_LIBRARY_PATH}";
+      };
+      
+      # Create cache directories using systemd tmpfiles
+      systemd.user.tmpfiles.rules = [
+        "d %h/.cache/faster-whisper 0755 %u %u -"
+        "d %h/.cache/whisper-cpp 0755 %u %u -"
+        "d %h/.cache/whisper-cpp/models 0755 %u %u -"
+      ];
+    }
+    
+    # Optional: Auto-start daemon service
+    (mkIf cfg.autoStartDaemon {
+      systemd.user.services.whisp-away-daemon = {
+        description = "WhispAway speech recognition daemon";
+        after = [ "graphical-session.target" ];
+        partOf = [ "graphical-session.target" ];
+        wantedBy = [ "graphical-session.target" ];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = "${whisp-away}/bin/whisp-away daemon -b ${cfg.defaultBackend}";
+          Restart = "on-failure";
+          RestartSec = 5;
+        };
+        environment = {
+          WA_WHISPER_MODEL = cfg.defaultModel;
+          WA_WHISPER_SOCKET = "/tmp/whisp-away-daemon.sock";
+        } // optionalAttrs (cfg.accelerationType == "cuda") {
+          CUDA_VISIBLE_DEVICES = "0";
+        };
+      };
+    })
+    
+    # Optional: Auto-start tray service
+    (mkIf cfg.autoStartTray {
+      systemd.user.services.whisp-away-tray = {
+        description = "WhispAway system tray";
+        after = [ "graphical-session.target" "tray.target" ];
+        partOf = [ "graphical-session.target" ];
+        requires = [ "tray.target" ];
+        wantedBy = [ "graphical-session.target" ];
+        serviceConfig = {
+          Type = "simple";
+          ExecStart = "${whisp-away}/bin/whisp-away tray -b ${cfg.defaultBackend}";
+          Restart = "on-failure";
+          RestartSec = 5;
+        };
+        environment = {
+          WA_WHISPER_MODEL = cfg.defaultModel;
+          WA_WHISPER_BACKEND = cfg.defaultBackend;
+          WA_WHISPER_SOCKET = "/tmp/whisp-away-daemon.sock";
+          WA_USE_CLIPBOARD = if cfg.useClipboard then "true" else "false";
+        };
+      };
+    })
+  ]);
 }
