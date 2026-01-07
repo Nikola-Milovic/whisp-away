@@ -132,12 +132,15 @@ in {
         };
         Service = {
           Type = "simple";
-          ExecStart = "${whisp-away}/bin/whisp-away daemon -b ${cfg.defaultBackend}";
+          ExecStart = "${whisp-away}/bin/whisp-away daemon";
           Restart = "on-failure";
           RestartSec = 5;
+          # All configuration via environment variables
           Environment = [
+            "WA_WHISPER_BACKEND=${cfg.defaultBackend}"
             "WA_WHISPER_MODEL=${cfg.defaultModel}"
             "WA_WHISPER_SOCKET=/tmp/whisp-away-daemon.sock"
+            "WA_USE_CLIPBOARD=${if cfg.useClipboard then "true" else "false"}"
           ] ++ optionals (cfg.accelerationType == "cuda") [
             "CUDA_VISIBLE_DEVICES=0"
           ];
@@ -159,12 +162,13 @@ in {
         };
         Service = {
           Type = "simple";
-          ExecStart = "${whisp-away}/bin/whisp-away tray -b ${cfg.defaultBackend}";
+          ExecStart = "${whisp-away}/bin/whisp-away tray";
           Restart = "on-failure";
           RestartSec = 5;
+          # All configuration via environment variables
           Environment = [
-            "WA_WHISPER_MODEL=${cfg.defaultModel}"
             "WA_WHISPER_BACKEND=${cfg.defaultBackend}"
+            "WA_WHISPER_MODEL=${cfg.defaultModel}"
             "WA_WHISPER_SOCKET=/tmp/whisp-away-daemon.sock"
             "WA_USE_CLIPBOARD=${if cfg.useClipboard then "true" else "false"}"
           ];

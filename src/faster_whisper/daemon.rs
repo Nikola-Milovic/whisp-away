@@ -8,7 +8,7 @@ pub fn run_daemon(model: &str, socket_path: &str) -> Result<()> {
         backend: Some("faster-whisper".to_string()),
         model: Some(model.to_string()),
         socket_path: Some(socket_path.to_string()),
-        use_clipboard: Some(resolve_use_clipboard(None)),
+        use_clipboard: Some(resolve_use_clipboard()),
     };
     if let Err(e) = write_daemon_config(&config) {
         eprintln!("Warning: Failed to write daemon config: {}", e);

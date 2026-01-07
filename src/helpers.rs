@@ -92,16 +92,10 @@ pub fn get_runtime_dir() -> String {
 }
 
 /// Resolves the socket path with priority:
-/// 1. Command-line argument (explicit override)
-/// 2. WA_WHISPER_SOCKET env var (set via NixOS config)
-/// 3. Daemon config file (written by running daemon)
-/// 4. Default to "/tmp/whisp-away-daemon.sock"
-pub fn resolve_socket_path(arg: Option<String>) -> String {
-    if let Some(path) = arg {
-        debug!("Using socket path from command-line: {}", path);
-        return path;
-    }
-    
+/// 1. WA_WHISPER_SOCKET env var (set via NixOS service config)
+/// 2. Daemon config file (written by running daemon)
+/// 3. Default to "/tmp/whisp-away-daemon.sock"
+pub fn resolve_socket_path() -> String {
     if let Ok(path) = std::env::var("WA_WHISPER_SOCKET") {
         debug!("Using socket path from env: {}", path);
         return path;
@@ -120,16 +114,10 @@ pub fn resolve_socket_path(arg: Option<String>) -> String {
 }
 
 /// Resolves the backend with priority:
-/// 1. Command-line argument (explicit override)
-/// 2. WA_WHISPER_BACKEND env var (set via NixOS config)
-/// 3. Daemon config file (written by running daemon)
-/// 4. Default to "faster-whisper"
-pub fn resolve_backend(arg: Option<String>) -> String {
-    if let Some(backend) = arg {
-        debug!("Using backend from command-line: {}", backend);
-        return backend;
-    }
-    
+/// 1. WA_WHISPER_BACKEND env var (set via NixOS service config)
+/// 2. Daemon config file (written by running daemon)
+/// 3. Default to "faster-whisper"
+pub fn resolve_backend() -> String {
     if let Ok(backend) = std::env::var("WA_WHISPER_BACKEND") {
         debug!("Using backend from env: {}", backend);
         return backend;
@@ -148,16 +136,10 @@ pub fn resolve_backend(arg: Option<String>) -> String {
 }
 
 /// Resolves the model to use with priority:
-/// 1. Command-line argument (explicit override)
-/// 2. WA_WHISPER_MODEL env var (set via NixOS config)
-/// 3. Daemon config file (written by running daemon)
-/// 4. Default to "base.en"
-pub fn resolve_model(arg: Option<String>) -> String {
-    if let Some(model) = arg {
-        debug!("Using model from command-line: {}", model);
-        return model;
-    }
-    
+/// 1. WA_WHISPER_MODEL env var (set via NixOS service config)
+/// 2. Daemon config file (written by running daemon)
+/// 3. Default to "base.en"
+pub fn resolve_model() -> String {
     if let Ok(model) = std::env::var("WA_WHISPER_MODEL") {
         debug!("Using model from env: {}", model);
         return model;
@@ -211,16 +193,10 @@ pub fn send_notification(title: &str, message: &str, timeout_ms: u32) {
 }
 
 /// Resolves whether to use clipboard with priority:
-/// 1. Command-line argument (explicit override)
-/// 2. WA_USE_CLIPBOARD env var (set via NixOS config)
-/// 3. Daemon config file (written by running daemon)
-/// 4. Default to false
-pub fn resolve_use_clipboard(arg: Option<bool>) -> bool {
-    if let Some(use_clipboard) = arg {
-        debug!("Using clipboard setting from command-line: {}", use_clipboard);
-        return use_clipboard;
-    }
-    
+/// 1. WA_USE_CLIPBOARD env var (set via NixOS service config)
+/// 2. Daemon config file (written by running daemon)
+/// 3. Default to false
+pub fn resolve_use_clipboard() -> bool {
     if let Ok(val) = std::env::var("WA_USE_CLIPBOARD") {
         let use_clipboard = val.to_lowercase() == "true";
         debug!("Using clipboard setting from env: {}", use_clipboard);

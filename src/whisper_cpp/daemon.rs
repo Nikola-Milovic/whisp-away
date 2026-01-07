@@ -17,12 +17,12 @@ const SOCKET_PATH: &str = "/tmp/whisp-away-daemon.sock";
 #[tokio::main]
 pub async fn run_daemon(model_path: &str) -> Result<()> {
     // Write daemon config so CLI commands can read our settings
-    let socket_path = resolve_socket_path(None);
+    let socket_path = resolve_socket_path();
     let config = DaemonConfig {
         backend: Some("whisper-cpp".to_string()),
         model: Some(model_path.to_string()),
         socket_path: Some(socket_path),
-        use_clipboard: Some(resolve_use_clipboard(None)),
+        use_clipboard: Some(resolve_use_clipboard()),
     };
     if let Err(e) = write_daemon_config(&config) {
         eprintln!("Warning: Failed to write daemon config: {}", e);

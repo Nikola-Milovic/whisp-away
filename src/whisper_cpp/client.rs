@@ -53,7 +53,7 @@ pub fn stop_and_transcribe_daemon(socket_path: &str, audio_file_override: Option
     eprintln!("DEBUG: Starting transcription at {:?}", start_time);
     
     // Get model for notification
-    let resolved_model = crate::helpers::resolve_model(model.clone());
+    let resolved_model = crate::helpers::resolve_model();
     let acceleration = crate::helpers::get_acceleration_type();
     let transcribe_msg = format!("⏳ Transcribing...\nBackend: whisper-cpp ({}) | Model: {}", acceleration, resolved_model);
     
@@ -74,8 +74,8 @@ pub fn stop_and_transcribe_daemon(socket_path: &str, audio_file_override: Option
             let _ = fs::remove_file(&audio_file);
         }
         Err(e) => {
-            // Use the model parameter if provided, otherwise resolve from env
-            let model = crate::helpers::resolve_model(model);
+            // Resolve model from env/daemon config
+            let model = crate::helpers::resolve_model();
             
             let fallback_msg = if bindings {
                 format!("⚠️ Daemon not running, using fallback\nBackend: whisper-cpp (bindings) | Model: {}", model)

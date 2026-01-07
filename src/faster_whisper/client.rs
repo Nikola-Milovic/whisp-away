@@ -53,7 +53,7 @@ pub fn stop_and_transcribe_daemon(socket_path: &str, use_clipboard: bool) -> Res
     }
 
     // Get model for notification
-    let model = helpers::resolve_model(None);
+    let model = helpers::resolve_model();
     let acceleration = helpers::get_acceleration_type();
     let transcribe_msg = format!("⏳ Transcribing...\nBackend: faster-whisper ({}) | Model: {}", acceleration, model);
     

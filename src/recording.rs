@@ -378,8 +378,8 @@ pub fn start_recording() -> Result<()> {
     debug!("Wrote PID {} to {}", pid, PID_FILE);
 
     // Get config from environment for notification
-    let model = crate::helpers::resolve_model(None);
-    let backend = crate::helpers::resolve_backend(None);
+    let model = crate::helpers::resolve_model();
+    let backend = crate::helpers::resolve_backend();
     let acceleration = crate::helpers::get_acceleration_type();
     let recording_msg = format!("Recording... (release to stop)\nBackend: {} ({}) | Model: {}", backend, acceleration, model);
     

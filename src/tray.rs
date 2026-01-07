@@ -22,9 +22,9 @@ impl Default for DaemonStatus {
         // Use resolve functions to get the initial values (respects env vars)
         Self {
             running: false,
-            model: crate::helpers::resolve_model(None),
+            model: crate::helpers::resolve_model(),
             processing: false,
-            use_clipboard: crate::helpers::resolve_use_clipboard(None),
+            use_clipboard: crate::helpers::resolve_use_clipboard(),
         }
     }
 }

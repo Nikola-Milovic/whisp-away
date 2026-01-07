@@ -228,6 +228,10 @@ nix develop      # Enter development shell
 cargo build --release --features vulkan
 ```
 
+## TODO:
+- fix bug where commands don't use `WA_*` env variables as intended. (eg `use_clipboard` setting is set to `true` but toggle will set it to false by default, it won't read the setting from the env var)
+- improve tray, currently it does not connect properly to daemon.
+
 ## Project Status
 
 This project is actively maintained and primarily tested on NixOS. Contributions are welcome!
@@ -242,3 +246,4 @@ MIT License
 - [whisper.cpp](https://github.com/ggerganov/whisper.cpp) - C++ implementation
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - CTranslate2 optimized implementation
 - [whisper-rs](https://github.com/tazz4843/whisper-rs) - Rust bindings
+- [madjinn's implementation](https://github.com/madjinn/whisp-away) - original implementation, this repo is a fork of `madjinn's` implementation.
