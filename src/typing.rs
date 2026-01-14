@@ -4,13 +4,21 @@ use std::io::Write;
 use tracing::debug;
 use crate::helpers;
 
+/// Normalize text by collapsing multiple whitespace characters into single spaces
+fn normalize_whitespace(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// Output transcribed text to clipboard or type at cursor
 pub fn output_text(text: &str, use_clipboard: bool, backend_name: &str) -> Result<()> {
     debug!("output_text called: text='{}', use_clipboard={}, backend={}", 
            if text.len() > 50 { &text[..50] } else { text },
            use_clipboard, backend_name);
     
-    if text.trim().is_empty() {
+    // Normalize whitespace: collapse multiple spaces into single space
+    let normalized_text = normalize_whitespace(text);
+    
+    if normalized_text.is_empty() {
         debug!("No speech detected (empty text received)");
         helpers::send_notification(
             "Voice Input",
@@ -21,8 +29,8 @@ pub fn output_text(text: &str, use_clipboard: bool, backend_name: &str) -> Resul
     }
 
     if use_clipboard {
-        debug!("Copying to clipboard ({} chars)", text.trim().len());
-        copy_to_clipboard(text.trim())?;
+        debug!("Copying to clipboard ({} chars)", normalized_text.len());
+        copy_to_clipboard(&normalized_text)?;
         
         helpers::send_notification(
             "Voice Input",
@@ -30,11 +38,11 @@ pub fn output_text(text: &str, use_clipboard: bool, backend_name: &str) -> Resul
             1000
         );
     } else {
-        debug!("Typing at cursor ({} chars)", text.trim().len());
+        debug!("Typing at cursor ({} chars)", normalized_text.len());
         // Small delay before typing
         std::thread::sleep(std::time::Duration::from_millis(30));
         
-        type_at_cursor(text.trim(), backend_name)?;
+        type_at_cursor(&normalized_text, backend_name)?;
     }
 
     Ok(())

@@ -3,7 +3,7 @@ use std::fs::{self, File};
 use std::os::unix::fs::OpenOptionsExt;
 use std::process::Command;
 use std::time::{Duration, SystemTime};
-use tracing::{debug, warn, error};
+use tracing::{debug, info, warn, error};
 use crate::helpers::is_process_running;
 
 const LOCK_FILE: &str = "/tmp/whisp-away-recording.lock";
@@ -13,28 +13,44 @@ const MAX_RECORDING_AGE_SECS: u64 = 600; // 10 minutes
 /// Check if a recording is currently in progress
 pub fn is_recording() -> bool {
     // Check if pidfile exists and process is running
+    let pid_exists = std::path::Path::new(PID_FILE).exists();
+    let lock_exists = std::path::Path::new(LOCK_FILE).exists();
+    
+    debug!("Checking recording status - pid_file exists: {}, lock_file exists: {}", 
+           pid_exists, lock_exists);
+    
     if let Ok(pid_str) = fs::read_to_string(PID_FILE) {
+        debug!("PID file contents: '{}'", pid_str.trim());
         if let Ok(pid) = pid_str.trim().parse::<u32>() {
-            if is_process_running(pid) {
-                debug!("Recording in progress (PID: {})", pid);
+            let running = is_process_running(pid);
+            debug!("PID {} running: {}", pid, running);
+            if running {
+                info!("Recording in progress (PID: {})", pid);
                 return true;
             }
+        } else {
+            debug!("Failed to parse PID from: '{}'", pid_str.trim());
         }
+    } else if pid_exists {
+        debug!("PID file exists but couldn't read it");
     }
     
     // Also check if lock file exists and is locked
-    if std::path::Path::new(LOCK_FILE).exists() {
+    if lock_exists {
         if let Ok(lock_file) = fs::OpenOptions::new().read(true).open(LOCK_FILE) {
             use std::os::unix::io::AsRawFd;
             let fd = lock_file.as_raw_fd();
             // Try to acquire lock non-blocking - if it fails, someone else has it
             let result = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+            debug!("flock result: {} (0 = acquired, non-zero = held by other)", result);
             if result != 0 {
-                debug!("Recording lock is held by another process");
+                info!("Recording lock is held by another process");
                 return true;
             }
             // We got the lock, release it immediately
             unsafe { libc::flock(fd, libc::LOCK_UN) };
+        } else {
+            debug!("Couldn't open lock file");
         }
     }
     

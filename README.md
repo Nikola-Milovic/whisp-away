@@ -8,7 +8,7 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
 - **Dual Backends**: Choose between `whisper.cpp` or `faster-whisper`
 - **Hardware Acceleration**: CUDA, Vulkan, OpenVINO, and CPU support
 - **Model Preloading**: Daemon mode keeps models in memory for instant transcription
-- **System Tray Control**: Start/stop daemon and toggle output mode
+- **System Tray Indicator**: Shows recording status, backend info on hover
 - **NixOS Integration**: First-class NixOS and Home Manager support
 - **Single Instance**: Only one recording at a time, automatic cleanup of old files
 
@@ -44,6 +44,7 @@ Voice dictation for Linux using OpenAI's Whisper models. Type with your voice us
 Configure in your window manager. Two options:
 
 **Option 1: Single key toggle** (simplest)
+
 ```conf
 # Hyprland - press once to start, press again to stop and transcribe
 bind = ,section,exec, whisp-away toggle
@@ -53,6 +54,7 @@ bind = ,section,exec, whisp-away toggle --clipboard true
 ```
 
 **Option 2: Push-to-talk** (hold to record)
+
 ```conf
 # Hyprland - hold key to record, release to transcribe
 bind = ,section,exec, whisp-away start
@@ -67,14 +69,19 @@ Note: `section` is the § key on Swedish keyboards (top-left, below Esc). Replac
 
 ### System Tray
 
-The tray icon provides easy control:
-- **Left-click**: Start/stop daemon
-- **Right-click**: Toggle clipboard mode, check status, switch backends
+The tray icon shows recording status at a glance:
+
+- **Icon**: Changes to indicate recording state (active mic = recording, muted mic = idle)
+- **Hover**: Shows backend, model, and acceleration info
+- **Right-click menu**: Displays current status (informational only)
 
 Start manually if not using `autoStartTray`:
+
 ```bash
 whisp-away tray
 ```
+
+The tray is purely informational - use keybinds to control recording.
 
 ### Daemon Mode
 
@@ -120,6 +127,7 @@ whisp-away stop --audio-file recording.wav
 | **large-v3** | 1550 MB | Slowest | Best | Maximum accuracy, multilingual |
 
 Models download automatically on first use and are stored in:
+
 - `~/.cache/whisper-cpp/models/` (GGML models for whisper.cpp)
 - `~/.cache/faster-whisper/` (CTranslate2 models for faster-whisper)
 
@@ -176,6 +184,7 @@ RUST_LOG=debug whisp-away stop
 The VAD (Voice Activity Detection) filter may be too aggressive. Try:
 
 1. **Check your microphone** - Record and play back to verify:
+
    ```bash
    pw-record /tmp/test.wav
    # Speak for a few seconds, then Ctrl+C
@@ -185,6 +194,7 @@ The VAD (Voice Activity Detection) filter may be too aggressive. Try:
 2. **Check the right input device is selected** using `pavucontrol` or your desktop audio settings
 
 3. **Disable VAD temporarily** to test:
+
    ```bash
    WHISPER_VAD=false whisp-away daemon
    ```
@@ -218,19 +228,21 @@ The VAD (Voice Activity Detection) filter may be too aggressive. Try:
 ## Building from Source
 
 ### With Nix
+
 ```bash
 nix build        # Build with default settings
 nix develop      # Enter development shell
 ```
 
 ### With Cargo
+
 ```bash
 cargo build --release --features vulkan
 ```
 
-## TODO:
-- fix bug where commands don't use `WA_*` env variables as intended. (eg `use_clipboard` setting is set to `true` but toggle will set it to false by default, it won't read the setting from the env var)
-- improve tray, currently it does not connect properly to daemon.
+## TODO
+
+nothing yet
 
 ## Project Status
 
@@ -247,3 +259,4 @@ MIT License
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - CTranslate2 optimized implementation
 - [whisper-rs](https://github.com/tazz4843/whisper-rs) - Rust bindings
 - [madjinn's implementation](https://github.com/madjinn/whisp-away) - original implementation, this repo is a fork of `madjinn's` implementation.
+
