@@ -250,17 +250,30 @@ Install pre-push hooks to catch dependency hash mismatches before pushing:
 ./scripts/setup-git-hooks.sh
 ```
 
-### Updating Dependency Hashes
+### Updating Dependencies
 
-If upstream `whisper-rs` updates and you get hash mismatch errors:
+The `whisper-rs` dependency is pinned to a specific commit in `Cargo.toml` for reproducible builds.
+
+**To update to a newer version:**
 
 ```bash
+# 1. Find the latest commit from the whisp-away branch
+git ls-remote https://codeberg.org/madjinn/whisper-rs.git whisp-away
+
+# 2. Update the rev in Cargo.toml to the new commit hash
+
+# 3. Update Cargo.lock
+cargo update -p whisper-rs
+
+# 4. Update Nix hashes
 ./scripts/update-git-deps.sh
-git add git-deps.nix
-git commit -m "chore: update whisper-rs hash"
+
+# 5. Commit all changes
+git add Cargo.toml Cargo.lock git-deps.nix
+git commit -m "chore: update whisper-rs to <new-commit>"
 ```
 
-The pre-push hook will automatically verify hashes are correct.
+The pre-push hook will verify hashes are correct before pushing.
 
 ## TODO
 
