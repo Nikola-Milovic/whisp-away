@@ -977,7 +977,7 @@ dependencies = [
 [[package]]
 name = "whisper-rs"
 version = "0.15.1"
-source = "git+https://codeberg.org/madjinn/whisper-rs.git?branch=whisp-away#c80df5d5090906ef32b34c04f413c3fd54bde7bb"
+source = "git+https://codeberg.org/madjinn/whisper-rs.git?rev=c80df5d5090906ef32b34c04f413c3fd54bde7bb#c80df5d5090906ef32b34c04f413c3fd54bde7bb"
 dependencies = [
  "libc",
  "whisper-rs-sys",
@@ -986,7 +986,7 @@ dependencies = [
 [[package]]
 name = "whisper-rs-sys"
 version = "0.14.1"
-source = "git+https://codeberg.org/madjinn/whisper-rs.git?branch=whisp-away#c80df5d5090906ef32b34c04f413c3fd54bde7bb"
+source = "git+https://codeberg.org/madjinn/whisper-rs.git?rev=c80df5d5090906ef32b34c04f413c3fd54bde7bb#c80df5d5090906ef32b34c04f413c3fd54bde7bb"
 dependencies = [
  "bindgen",
  "cfg-if",
