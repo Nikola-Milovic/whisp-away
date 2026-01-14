@@ -240,6 +240,28 @@ nix develop      # Enter development shell
 cargo build --release --features vulkan
 ```
 
+## Development
+
+### Setup Git Hooks
+
+Install pre-push hooks to catch dependency hash mismatches before pushing:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+### Updating Dependency Hashes
+
+If upstream `whisper-rs` updates and you get hash mismatch errors:
+
+```bash
+./scripts/update-git-deps.sh
+git add git-deps.nix
+git commit -m "chore: update whisper-rs hash"
+```
+
+The pre-push hook will automatically verify hashes are correct.
+
 ## TODO
 
 nothing yet

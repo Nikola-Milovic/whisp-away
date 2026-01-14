@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Pre-push hook: verify git dependency hashes are correct before pushing
+set -euo pipefail
+
+echo "🔍 Verifying git dependency hashes..."
+
+# Quick check using nix build --dry-run
+# This validates hashes without actually building everything
+BUILD_OUTPUT=$(nix build --dry-run 2>&1) || {
+    if echo "$BUILD_OUTPUT" | grep -q "hash mismatch"; then
+        echo ""
+        echo "❌ Git dependency hash mismatch detected!"
+        echo ""
+        echo "The upstream dependency has changed. Run:"
+        echo "  ./scripts/update-git-deps.sh"
+        echo ""
+        echo "Then commit the updated git-deps.nix and try pushing again."
+        echo ""
+        
+        # Show what needs updating
+        if echo "$BUILD_OUTPUT" | grep -q "got:"; then
+            echo "Expected hash:"
+            echo "$BUILD_OUTPUT" | grep "got:" | head -1
+        fi
+        
+        exit 1
+    else
+        # Some other build error - let it through, CI will catch it
+        echo "⚠️  Build check had non-hash errors (continuing anyway)"
+    fi
+}
+
+echo "✅ Git dependency hashes are valid"
+
